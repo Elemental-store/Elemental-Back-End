@@ -6,6 +6,7 @@ import com.elemental.backend.entity.Address;
 import com.elemental.backend.entity.User;
 import com.elemental.backend.exception.NotFoundException;
 import com.elemental.backend.repository.AddressRepository;
+import com.elemental.backend.repository.OrderRepository;
 import com.elemental.backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,12 +18,15 @@ import java.util.List;
 public class AddressServiceImpl implements AddressService {
 
     private final AddressRepository addressRepository;
-    private final UserRepository userRepository;
+    private final UserRepository    userRepository;
+    private final OrderRepository   orderRepository;
 
     public AddressServiceImpl(AddressRepository addressRepository,
-                              UserRepository userRepository) {
+                              UserRepository userRepository,
+                              OrderRepository orderRepository) {
         this.addressRepository = addressRepository;
-        this.userRepository = userRepository;
+        this.userRepository    = userRepository;
+        this.orderRepository   = orderRepository;
     }
 
     @Override
@@ -71,6 +75,7 @@ public class AddressServiceImpl implements AddressService {
         Address address = addressRepository.findByIdAndUserEmail(addressId, email)
                 .orElseThrow(() -> new NotFoundException("Dirección no encontrada"));
 
+        orderRepository.nullifyAddress(address);
         addressRepository.delete(address);
     }
 

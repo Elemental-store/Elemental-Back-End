@@ -1,0 +1,331 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: #111;
+  background: #fff;
+  width: 100%;
+  margin: 0;
+  padding: 10px 8px;
+}
+
+    .logo-wrap {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .store-info {
+      text-align: center;
+      font-size: 10px;
+      line-height: 1.7;
+      color: #333;
+      margin-bottom: 12px;
+    }
+
+    .sep {
+      border: none;
+      border-top: 1px dashed #aaa;
+      margin: 10px 0;
+    }
+    .sep-solid {
+      border: none;
+      border-top: 1px solid #111;
+      margin: 10px 0;
+    }
+    .sep-double {
+      border: none;
+      border-top: 3px double #111;
+      margin: 10px 0;
+    }
+
+    .ticket-row {
+      display: table;
+      width: 100%;
+      margin-bottom: 3px;
+    }
+    .ticket-row-label {
+      display: table-cell;
+      font-size: 10px;
+      color: #555;
+      width: 50%;
+    }
+    .ticket-row-value {
+      display: table-cell;
+      font-size: 10px;
+      color: #111;
+      text-align: right;
+      width: 50%;
+    }
+
+    .section-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-align: center;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    .client-block {
+      font-size: 10px;
+      line-height: 1.7;
+      color: #333;
+      text-align: center;
+      margin-bottom: 4px;
+    }
+
+    .items-header {
+      display: table;
+      width: 100%;
+      border-bottom: 1px solid #111;
+      padding-bottom: 4px;
+      margin-bottom: 5px;
+    }
+    .items-header-desc {
+      display: table-cell;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      width: 45%;
+    }
+    .items-header-qty {
+      display: table-cell;
+      font-size: 10px;
+      font-weight: 700;
+      text-align: center;
+      width: 10%;
+    }
+    .items-header-price {
+      display: table-cell;
+      font-size: 10px;
+      font-weight: 700;
+      text-align: right;
+      width: 20%;
+    }
+    .items-header-total {
+      display: table-cell;
+      font-size: 10px;
+      font-weight: 700;
+      text-align: right;
+      width: 25%;
+    }
+
+    .item-row {
+      display: table;
+      width: 100%;
+      margin-bottom: 6px;
+    }
+    .item-desc {
+      display: table-cell;
+      font-size: 10px;
+      width: 45%;
+      vertical-align: top;
+      line-height: 1.4;
+    }
+    .item-desc-name { font-weight: 700; }
+    .item-desc-ref  { color: #666; font-size: 9px; }
+    .item-qty {
+      display: table-cell;
+      font-size: 10px;
+      text-align: center;
+      width: 10%;
+      vertical-align: top;
+    }
+    .item-price {
+      display: table-cell;
+      font-size: 10px;
+      text-align: right;
+      width: 20%;
+      vertical-align: top;
+    }
+    .item-total {
+      display: table-cell;
+      font-size: 10px;
+      text-align: right;
+      width: 25%;
+      vertical-align: top;
+      font-weight: 700;
+    }
+
+    .totals-row {
+      display: table;
+      width: 100%;
+      margin-bottom: 3px;
+    }
+    .totals-label {
+      display: table-cell;
+      font-size: 10px;
+      color: #333;
+      width: 65%;
+    }
+    .totals-value {
+      display: table-cell;
+      font-size: 10px;
+      text-align: right;
+      color: #111;
+      width: 35%;
+    }
+    .totals-row-big .totals-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #111;
+    }
+    .totals-row-big .totals-value {
+      font-size: 12px;
+      font-weight: 700;
+      color: #111;
+    }
+
+    .payment-block {
+      font-size: 10px;
+      line-height: 1.7;
+      color: #333;
+      margin: 4px 0;
+    }
+
+    .footer {
+      text-align: center;
+      font-size: 10px;
+      line-height: 1.7;
+      color: #333;
+      margin-top: 4px;
+    }
+    .footer-bold {
+      font-weight: 700;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+    .footer-legal {
+      font-size: 9px;
+      color: #666;
+      line-height: 1.6;
+      margin-top: 6px;
+      text-align: left;
+    }
+    .stars {
+      text-align: center;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      margin: 6px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- LOGO -->
+  <div class="logo-wrap">
+    <img th:if="${logo != null and !#strings.isEmpty(logo)}"
+       th:src="${logo}"
+       style="height: 120px; width: auto;"/>
+  </div>
+
+  <div class="store-info">
+    Calle Serrano 42, 28001 Madrid<br/>
+    NIF: B77777777 &#160; TLF: +34 123 123 123
+  </div>
+
+  <hr class="sep-solid"/>
+
+  <!-- CABECERA TICKET -->
+  <div class="ticket-row">
+    <div class="ticket-row-label">Fecha:</div>
+    <div class="ticket-row-value" th:text="${invoiceDate}">01 Enero 2026</div>
+  </div>
+  <div class="ticket-row">
+    <div class="ticket-row-label">Factura N.:</div>
+    <div class="ticket-row-value" th:text="${invoiceNumber}">F0001</div>
+  </div>
+
+  <hr class="sep"/>
+
+  <!-- DATOS CLIENTE -->
+  <div class="section-title">Datos del cliente</div>
+  <div class="client-block">
+    <span th:text="${clientName}">Nombre</span><br/>
+    <span th:text="${clientEmail}">email</span><br/>
+    <span th:text="${clientAddress}">Calle</span><br/>
+    <span th:text="${clientCity}">Ciudad</span>
+  </div>
+
+  <hr class="sep"/>
+
+  <!-- CABECERA TABLA -->
+  <div class="items-header">
+    <div class="items-header-desc">ARTICULO</div>
+    <div class="items-header-qty">UD</div>
+    <div class="items-header-price">PRECIO</div>
+    <div class="items-header-total">IMPORTE</div>
+  </div>
+
+  <!-- PRODUCTOS -->
+  <div th:each="item : ${items}">
+    <div class="item-row">
+      <div class="item-desc">
+        <div class="item-desc-name" th:text="${item.productName}">Producto</div>
+        <div class="item-desc-ref" th:text="'Ref: ' + ${item.productId}">Ref: 001</div>
+      </div>
+      <div class="item-qty" th:text="${item.quantity}">1</div>
+      <div class="item-price" th:text="${#numbers.formatDecimal(item.unitPrice, 1, 2)} + ' EUR'">0,00</div>
+      <div class="item-total" th:text="${#numbers.formatDecimal(item.subtotal, 1, 2)} + ' EUR'">0,00</div>
+    </div>
+  </div>
+
+  <hr class="sep-solid"/>
+
+  <!-- TOTALES -->
+  <div class="totals-row">
+    <div class="totals-label">Total Neto</div>
+    <div class="totals-value" th:text="${#numbers.formatDecimal(subtotal, 1, 2)} + ' EUR'">0,00</div>
+  </div>
+  <div class="totals-row">
+    <div class="totals-label">IVA 21%</div>
+    <div class="totals-value" th:text="${#numbers.formatDecimal(iva, 1, 2)} + ' EUR'">0,00</div>
+  </div>
+
+  <hr class="sep-double"/>
+
+  <div class="totals-row totals-row-big">
+    <div class="totals-label">TOTAL</div>
+    <div class="totals-value" th:text="${#numbers.formatDecimal(total, 1, 2)} + ' EUR'">0,00</div>
+  </div>
+
+  <hr class="sep"/>
+
+  <!-- PAGO -->
+  <div class="payment-block">
+    Tarjeta online &#160;&#160; <span th:text="${#numbers.formatDecimal(total, 1, 2)} + ' EUR'">0,00 EUR</span>
+  </div>
+
+  <hr class="sep-double"/>
+
+  <!-- PIE -->
+  <div class="footer">
+    <div class="footer-bold">ELEMENTAL</div>
+    NIF: B77777777<br/>
+    Calle Serrano 42, 28001 Madrid<br/>
+    elemental.store.test@gmail.com<br/>
+    www.elemental.com
+  </div>
+
+  <div class="stars">* * * * * GRACIAS POR SU COMPRA * * * * *</div>
+
+  <hr class="sep"/>
+
+  <div class="footer-legal">
+    **** I.V.A. INCLUIDO EN EL PRECIO ****<br/><br/>
+    ELEMENTAL acepta el cambio o devolucion de sus productos en el plazo maximo
+    de 30 dias naturales desde la fecha de compra, siempre que estos no hayan
+    sido usados y/o deteriorados. El importe pagado se devolvera en el mismo
+    medio de pago en que haya sido abonado.<br/><br/>
+    Para cualquier consulta visite www.elemental.com o contacte con nosotros
+    en elemental@elemental.com
+  </div>
+
+</body>
+</html>

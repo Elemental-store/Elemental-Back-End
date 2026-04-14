@@ -67,7 +67,7 @@ public class SecurityConfig {
 
                         // Private
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
-                        .requestMatchers("/api/my/**").hasAuthority("ROLE_USER")
+                        .requestMatchers("/api/my/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/uploads/**").permitAll()
 

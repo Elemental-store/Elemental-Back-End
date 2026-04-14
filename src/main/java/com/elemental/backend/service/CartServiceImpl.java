@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Service
-@Transactional
+
 public class CartServiceImpl implements CartService {
 
     private final CartRepository cartRepository;
@@ -35,7 +35,6 @@ public class CartServiceImpl implements CartService {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public CartResponse getMyCart(String email) {
         Cart cart = cartRepository.findByUserEmailWithItems(email)
                 .orElseGet(() -> createCart(email));

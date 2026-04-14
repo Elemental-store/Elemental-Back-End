@@ -3,7 +3,10 @@ package com.elemental.backend.controller;
 import com.elemental.backend.dto.AuthRequest;
 import com.elemental.backend.dto.AuthResponse;
 import com.elemental.backend.dto.RegisterRequest;
+import com.elemental.backend.dto.ForgotPasswordRequest;
+import com.elemental.backend.dto.ResetPasswordRequest;
 import com.elemental.backend.service.AuthService;
+import com.elemental.backend.service.PasswordResetService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,9 +15,11 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
 
-    public AuthController(AuthService authService) {
-        this.authService = authService;
+    public AuthController(AuthService authService, PasswordResetService passwordResetService) {
+        this.authService          = authService;
+        this.passwordResetService = passwordResetService;
     }
 
     @PostMapping(value="/register", consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -32,4 +37,13 @@ public class AuthController {
         return authService.login(request);
     }
 
+    @PostMapping("/forgot-password")
+    public void forgotPassword(@RequestBody ForgotPasswordRequest request) {
+        passwordResetService.sendResetEmail(request.getEmail());
+    }
+
+    @PostMapping("/reset-password")
+    public void resetPassword(@RequestBody ResetPasswordRequest request) {
+        passwordResetService.resetPassword(request.getToken(), request.getNewPassword());
+    }
 }

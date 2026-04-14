@@ -5,6 +5,7 @@ import com.elemental.backend.dto.AuthResponse;
 import com.elemental.backend.dto.RegisterRequest;
 import com.elemental.backend.entity.Role;
 import com.elemental.backend.entity.User;
+import com.elemental.backend.exception.ConflictException;
 import com.elemental.backend.repository.UserRepository;
 import com.elemental.backend.security.JwtService;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -38,7 +39,7 @@ public class AuthServiceImpl implements AuthService {
     public AuthResponse register(RegisterRequest request, boolean admin) {
 
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            throw new RuntimeException("Email already in use");
+            throw new ConflictException("Este correo ya está registrado");
         }
 
         User user = new User();
