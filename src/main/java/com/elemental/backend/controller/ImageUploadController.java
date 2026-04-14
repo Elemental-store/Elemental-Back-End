@@ -36,21 +36,17 @@ public class ImageUploadController {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Producto no encontrado"));
 
-        // Crear directorio si no existe
         Path uploadPath = Paths.get(uploadDir);
         if (!Files.exists(uploadPath)) {
             Files.createDirectories(uploadPath);
         }
 
-        // Generar nombre único
         String ext = getExtension(file.getOriginalFilename());
         String filename = "product-" + id + "-" + UUID.randomUUID() + ext;
         Path filePath = uploadPath.resolve(filename);
 
-        // Guardar archivo
         Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-        // Actualizar producto
         String imageUrl = baseUrl + "/uploads/" + filename;
         product.setImageUrl(imageUrl);
         productRepository.save(product);

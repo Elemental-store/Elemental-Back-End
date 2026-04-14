@@ -22,14 +22,12 @@ public class MyOrderController {
         this.orderService = orderService;
     }
 
-    // GET /api/my/orders -> Mis pedidos
     @GetMapping
     public List<OrderResponse> myOrders(Authentication authentication) {
-        String email = authentication.getName(); // viene del JWT
+        String email = authentication.getName();
         return orderService.getMyOrders(email);
     }
 
-    // GET /api/my/orders/{id} -> Detalle (solo si es del usuario)
     @GetMapping("/{id}")
     public OrderResponse myOrderDetail(@PathVariable Long id, Authentication authentication) {
         String email = authentication.getName();

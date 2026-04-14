@@ -61,7 +61,6 @@ public class AuthServiceImpl implements AuthService {
             user.setStripeCustomerId(customerId);
             userRepository.save(user);
         } catch (Exception e) {
-            // No bloqueamos el registro si Stripe falla — se creará el Customer más tarde
             System.err.println("Warning: No se pudo crear Stripe Customer: " + e.getMessage());
         }
 

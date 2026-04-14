@@ -38,12 +38,10 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public OrderResponse createMyOrder(String customerEmail, OrderRequest request) {
 
-        // 1) Validar dirección (ownership)
         Address address = addressRepository
                 .findByIdAndUserEmail(request.getAddressId(), customerEmail)
                 .orElseThrow(() -> new AccessDeniedException("Dirección no válida para este usuario"));
 
-        // 2) Cargar carrito con items + productos
         Cart cart = cartRepository.findByUserEmailWithItems(customerEmail)
                 .orElseThrow(() -> new NotFoundException("Carrito no encontrado"));
 
@@ -51,27 +49,24 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalArgumentException("El carrito está vacío");
         }
 
-        // 3) Crear pedido base
         Order order = new Order();
         order.setCustomerEmail(customerEmail);
         order.setAddress(address);
         order.setStatus(OrderStatus.PENDING);
         order.setPayMethod(request.getPayMethod());
 
-        // 4) Crear detalles desde carrito + validar stock
         List<DetailsOrder> details = new ArrayList<>();
         double totalAmount = 0.0;
 
         for (CartItem cartItem : cart.getItems()) {
 
-            Product product = cartItem.getProduct(); // viene ya cargado por fetch join
+            Product product = cartItem.getProduct();
             int quantity = cartItem.getQuantity();
 
             if (product.getStock() < quantity) {
                 throw new IllegalArgumentException("Stock insuficiente para: " + product.getName());
             }
 
-            // descontar stock
             product.setStock(product.getStock() - quantity);
             productRepository.save(product);
 
@@ -92,10 +87,8 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalAmount(totalAmount);
         order.setDetails(details);
 
-        // 5) Guardar pedido
         Order savedOrder = orderRepository.save(order);
 
-        // 6) Vaciar carrito
         cart.getItems().clear();
         cartRepository.save(cart);
 
@@ -156,13 +149,12 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalArgumentException("Estado no válido: " + status);
         }
 
-        // (Opcional) restringir estados permitidos desde admin:
         if (newStatus != OrderStatus.PENDING &&
                 newStatus != OrderStatus.PAID &&
                 newStatus != OrderStatus.FAILED &&
                 newStatus != OrderStatus.SHIPPED &&
                 newStatus != OrderStatus.DELIVERED &&
-                newStatus != OrderStatus.CANCELLED) {  // ← añade esto
+                newStatus != OrderStatus.CANCELLED) {
             throw new IllegalArgumentException("Estado no permitido: " + status);
         }
 
@@ -174,7 +166,6 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public void delete(Long id) {
-        // pendiente / no implementado
     }
 
     private OrderResponse toResponse(Order order) {
@@ -192,7 +183,7 @@ public class OrderServiceImpl implements OrderService {
                 order.getId(),
                 order.getCustomerEmail(),
                 order.getTotalAmount(),
-                order.getStatus() == null ? null : order.getStatus().name(), // <-- status como String
+                order.getStatus() == null ? null : order.getStatus().name(),
                 items,
                 order.getCreateDate()
         );
@@ -203,17 +194,14 @@ public class OrderServiceImpl implements OrderService {
         Order order = orderRepository.findByIdWithDetails(orderId)
                 .orElseThrow(() -> new NotFoundException("Pedido no encontrado con id: " + orderId));
 
-        // Verificar que el pedido pertenece al cliente
         if (!order.getCustomerEmail().equalsIgnoreCase(customerEmail)) {
             throw new AccessDeniedException("No tienes permiso para cancelar este pedido");
         }
 
-        // Solo se pueden cancelar pedidos PENDING
         if (order.getStatus() != OrderStatus.PENDING) {
             throw new IllegalStateException("Solo se pueden cancelar pedidos en estado PENDIENTE");
         }
 
-        // Restaurar stock de los productos
         for (DetailsOrder detail : order.getDetails()) {
             Product product = detail.getProduct();
             product.setStock(product.getStock() + detail.getQuantity());

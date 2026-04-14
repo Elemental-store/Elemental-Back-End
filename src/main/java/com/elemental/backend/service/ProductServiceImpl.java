@@ -67,7 +67,6 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional(readOnly = true)
     public List<ProductResponse> getByCategoryId(Long categoryId) {
-        // Opcional pero recomendable: validar que la categoría exista
         if (!categoryRepository.existsById(categoryId)) {
             throw new NotFoundException("Categoría no encontrada con id: " + categoryId);
         }

@@ -65,8 +65,6 @@ public class PaymentServiceImpl implements PaymentService {
                             )
                             .putMetadata("orderId", String.valueOf(order.getId()));
 
-            // Si el usuario tiene Customer en Stripe, asociarlo al PaymentIntent
-            // Esto permite pagar con tarjetas guardadas del Customer
             if (stripeCustomerId != null && !stripeCustomerId.isEmpty()) {
                 builder.setCustomer(stripeCustomerId);
             }

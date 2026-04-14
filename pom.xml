@@ -83,12 +83,10 @@
             <artifactId>stripe-java</artifactId>
             <version>24.23.0</version>
         </dependency>
-        <!-- Spring Mail -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
-        <!-- Thymeleaf para templates de email (opcional pero más profesional) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-thymeleaf</artifactId>

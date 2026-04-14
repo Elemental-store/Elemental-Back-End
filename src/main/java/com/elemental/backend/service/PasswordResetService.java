@@ -33,7 +33,6 @@ public class PasswordResetService {
     @Transactional
     public void sendResetEmail(String email) {
         userRepository.findByEmail(email).ifPresent(user -> {
-            // Borramos tokens anteriores del mismo email
             tokenRepository.deleteByEmail(email);
 
             PasswordResetToken token = new PasswordResetToken();

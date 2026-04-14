@@ -68,13 +68,11 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
 
-        // 1) Vaciar carrito (si existe)
         cartRepository.findByUserEmailWithItems(email).ifPresent(cart -> {
             cart.getItems().clear();
             cartRepository.save(cart);
         });
 
-        // 2) Anonimizar direcciones (para no romper FK con orders.address_id)
         List<Address> addresses = addressRepository.findByUserEmailOrderByUpdatedAtDesc(email);
         for (Address a : addresses) {
             a.setStreet("DELETED");
@@ -84,12 +82,10 @@ public class UserServiceImpl implements UserService {
         }
         addressRepository.saveAll(addresses);
 
-        // 3) Anonimizar usuario + desactivar
         user.setFirstName(null);
         user.setLastName(null);
         user.setPhone(null);
 
-        // Invalidar password
         user.setPasswordHash("{bcrypt}$2a$10$FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
 
         user.setEnabled(false);

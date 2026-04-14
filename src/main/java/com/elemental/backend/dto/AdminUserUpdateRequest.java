@@ -4,9 +4,8 @@ public class AdminUserUpdateRequest {
     private String firstName;
     private String lastName;
     private String phone;
-    private String role; // "ROLE_USER" o "ROLE_ADMIN"
+    private String role;
 
-    // Getters y setters
     public String getFirstName() { return firstName; }
     public void setFirstName(String firstName) { this.firstName = firstName; }
 

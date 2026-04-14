@@ -24,7 +24,6 @@ public class StripeService {
         Stripe.apiKey = secretKey;
     }
 
-    // ── Crear Customer en Stripe ──────────────────────────────
     public String createCustomer(String email, String name) {
         try {
             CustomerCreateParams params = CustomerCreateParams.builder()
@@ -38,7 +37,6 @@ public class StripeService {
         }
     }
 
-    // ── Crear SetupIntent para guardar tarjeta ────────────────
     public String createSetupIntent(String customerId) {
         try {
             SetupIntentCreateParams params = SetupIntentCreateParams.builder()
@@ -52,7 +50,6 @@ public class StripeService {
         }
     }
 
-    // ── Listar tarjetas del Customer ──────────────────────────
     public List<Map<String, Object>> listPaymentMethods(String customerId) {
         try {
             CustomerListPaymentMethodsParams params = CustomerListPaymentMethodsParams.builder()
@@ -80,7 +77,6 @@ public class StripeService {
         }
     }
 
-    // ── Eliminar método de pago ───────────────────────────────
     public void detachPaymentMethod(String paymentMethodId) {
         try {
             PaymentMethod pm = PaymentMethod.retrieve(paymentMethodId);

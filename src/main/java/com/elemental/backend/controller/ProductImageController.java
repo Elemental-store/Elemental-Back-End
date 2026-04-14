@@ -62,7 +62,6 @@ public class ProductImageController {
 
         String imageUrl = baseUrl + "/uploads/" + filename;
 
-        // Sort order = número de imágenes actuales
         int sortOrder = productImageRepository.findByProductIdOrderBySortOrderAsc(productId).size();
 
         ProductImage image = new ProductImage();
@@ -71,7 +70,6 @@ public class ProductImageController {
         image.setSortOrder(sortOrder);
         ProductImage saved = productImageRepository.save(image);
 
-        // Si es la primera imagen, actualizar también imageUrl del producto
         if (sortOrder == 0) {
             product.setImageUrl(imageUrl);
             productRepository.save(product);
@@ -93,7 +91,6 @@ public class ProductImageController {
 
         productImageRepository.delete(image);
 
-        // Si era la primera imagen, actualizar imageUrl del producto
         List<ProductImage> remaining = productImageRepository
                 .findByProductIdOrderBySortOrderAsc(productId);
 

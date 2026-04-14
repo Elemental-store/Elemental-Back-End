@@ -24,7 +24,6 @@ public class PaymentMethodController {
         this.userRepository = userRepository;
     }
 
-    // GET /api/my/payment-methods — listar tarjetas guardadas
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> list(
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -36,14 +35,12 @@ public class PaymentMethodController {
         return ResponseEntity.ok(stripeService.listPaymentMethods(user.getStripeCustomerId()));
     }
 
-    // POST /api/my/payment-methods/setup-intent — obtener clientSecret para añadir tarjeta
     @PostMapping("/setup-intent")
     public ResponseEntity<Map<String, String>> setupIntent(
             @AuthenticationPrincipal UserDetails userDetails) {
 
         User user = getUser(userDetails);
 
-        // Si no tiene Customer en Stripe, lo creamos ahora
         if (user.getStripeCustomerId() == null) {
             String name = (user.getFirstName() != null ? user.getFirstName() : "")
                     + " " + (user.getLastName() != null ? user.getLastName() : "");
@@ -56,13 +53,11 @@ public class PaymentMethodController {
         return ResponseEntity.ok(Map.of("clientSecret", clientSecret));
     }
 
-    // DELETE /api/my/payment-methods/:id — eliminar tarjeta
     @DeleteMapping("/{paymentMethodId}")
     public ResponseEntity<Void> delete(
             @PathVariable String paymentMethodId,
             @AuthenticationPrincipal UserDetails userDetails) {
 
-        // Verificamos que el usuario tenga customer antes de eliminar
         User user = getUser(userDetails);
         if (user.getStripeCustomerId() == null) {
             return ResponseEntity.badRequest().build();

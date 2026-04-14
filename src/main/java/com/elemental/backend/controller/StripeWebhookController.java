@@ -72,7 +72,6 @@ public class StripeWebhookController {
 
                 String deliveryDate = calculateDeliveryDate();
 
-                // ── Notificación en la app ──
                 try {
                     notificationService.createOrderConfirmedNotification(
                             order.getCustomerEmail(), order.getId(), deliveryDate);
@@ -80,7 +79,6 @@ public class StripeWebhookController {
                     System.err.println("Error creando notificación: " + e.getMessage());
                 }
 
-                // ── Email + PDF adjunto ──
                 try {
                     User user = userRepository.findByEmail(order.getCustomerEmail())
                             .orElse(null);

@@ -59,10 +59,10 @@ public class EmailService {
             }
 
             mailSender.send(message);
-            System.out.println("✅ Email enviado correctamente a: " + toEmail);
+            System.out.println("Email enviado correctamente a: " + toEmail);
 
         } catch (Exception e) {
-            System.err.println("❌ Error enviando email: " + e.getMessage());
+            System.err.println("Error enviando email: " + e.getMessage());
             e.printStackTrace();
         }
     }
