@@ -3,8 +3,10 @@ package com.elemental.backend.service;
 import com.elemental.backend.dto.CategoryRequest;
 import com.elemental.backend.dto.CategoryResponse;
 import com.elemental.backend.entity.Category;
+import com.elemental.backend.entity.Product;
 import com.elemental.backend.exception.NotFoundException;
 import com.elemental.backend.repository.CategoryRepository;
+import com.elemental.backend.repository.ProductRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,34 +17,41 @@ import java.util.List;
 public class CategoryServiceImpl implements CategoryService {
 
     private final CategoryRepository categoryRepository;
+    private final ProductService     productService;
+    private final ProductRepository  productRepository;
 
-    public CategoryServiceImpl(CategoryRepository categoryRepository) {
+    public CategoryServiceImpl(CategoryRepository categoryRepository,
+                               ProductService productService,
+                               ProductRepository productRepository) {
         this.categoryRepository = categoryRepository;
+        this.productService     = productService;
+        this.productRepository  = productRepository;
     }
 
     @Override
     public CategoryResponse create(CategoryRequest request) {
         String name = request.getName().trim();
 
-        if (categoryRepository.existsByName(name)) {
-            throw new IllegalArgumentException("Ya existe una categoría con ese nombre");
+        // Resolver el padre antes del check de duplicados
+        Category parent = resolveParent(request.getParentId());
+
+        if (categoryRepository.existsByNameAndParent(name, parent)) {
+            throw new IllegalArgumentException("Ya existe una categoría con ese nombre en esta categoría padre");
         }
 
         Category category = new Category();
         category.setName(name);
         category.setDescription(request.getDescription());
+        category.setParent(parent);
 
-        Category saved = categoryRepository.save(category);
-        return toResponse(saved);
+        return toResponse(categoryRepository.save(category));
     }
 
     @Override
     @Transactional(readOnly = true)
     public CategoryResponse getById(Long id) {
-        Category category = categoryRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Categoría no encontrada con id: " + id));
-
-        return toResponse(category);
+        return toResponse(categoryRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Categoría no encontrada con id: " + id)));
     }
 
     @Override
@@ -53,6 +62,7 @@ public class CategoryServiceImpl implements CategoryService {
                 .map(this::toResponse)
                 .toList();
     }
+
     @Override
     public CategoryResponse update(Long id, CategoryRequest request) {
         Category category = categoryRepository.findById(id)
@@ -60,28 +70,63 @@ public class CategoryServiceImpl implements CategoryService {
 
         String newName = request.getName().trim();
 
-        if (!category.getName().equalsIgnoreCase(newName) && categoryRepository.existsByName(newName)) {
-            throw new IllegalArgumentException("Ya existe una categoría con ese nombre");
+        // Resolver el padre antes del check de duplicados
+        Category parent = resolveParent(request.getParentId());
+
+        if (request.getParentId() != null && request.getParentId().equals(id)) {
+            throw new IllegalArgumentException("Una categoría no puede ser su propio padre");
+        }
+
+        // Solo lanzar error si el nombre cambia y ya existe en el mismo nivel
+        if (!category.getName().equalsIgnoreCase(newName)
+                && categoryRepository.existsByNameAndParent(newName, parent)) {
+            throw new IllegalArgumentException("Ya existe una categoría con ese nombre en esta categoría padre");
         }
 
         category.setName(newName);
         category.setDescription(request.getDescription());
+        category.setParent(parent);
 
-        Category saved = categoryRepository.save(category);
-        return toResponse(saved);
+        return toResponse(categoryRepository.save(category));
     }
 
     @Override
     public void delete(Long id) {
-        if (!categoryRepository.existsById(id)) {
-            throw new NotFoundException("Categoría no encontrada con id: " + id);
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Categoría no encontrada con id: " + id));
+
+        // 1. Desvincular subcategorías que tengan esta como padre
+        List<Category> subcategories = categoryRepository.findByParent(category);
+        for (Category sub : subcategories) {
+            sub.setParent(null);
+            categoryRepository.save(sub);
         }
-        categoryRepository.deleteById(id);
+
+        // 2. Borrar productos de esta categoría y sus dependencias
+        List<Product> products = productRepository.findByCategory(category);
+        for (Product product : products) {
+            productService.delete(product.getId());
+        }
+
+        // 3. Borrar la categoría
+        categoryRepository.delete(category);
+    }
+
+    // ── Métodos privados ──────────────────────────────────────────────────────
+
+    private Category resolveParent(Long parentId) {
+        if (parentId == null) {
+            return null;
+        }
+        return categoryRepository.findById(parentId)
+                .orElseThrow(() -> new NotFoundException("Categoría padre no encontrada con id: " + parentId));
     }
 
     private CategoryResponse toResponse(Category category) {
+        Long parentId = category.getParent() != null ? category.getParent().getId() : null;
         return new CategoryResponse(
                 category.getId(),
+                parentId,
                 category.getName(),
                 category.getDescription(),
                 category.getCreateDate(),

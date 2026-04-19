@@ -9,30 +9,39 @@ import com.elemental.backend.repository.AddressRepository;
 import com.elemental.backend.repository.CartRepository;
 import com.elemental.backend.repository.OrderRepository;
 import com.elemental.backend.repository.ProductRepository;
+import com.elemental.backend.repository.UserRepository;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @Transactional
 public class OrderServiceImpl implements OrderService {
 
-    private final CartRepository cartRepository;
-    private final OrderRepository orderRepository;
+    private final CartRepository    cartRepository;
+    private final OrderRepository   orderRepository;
     private final ProductRepository productRepository;
     private final AddressRepository addressRepository;
+    private final EmailService      emailService;
+    private final UserRepository    userRepository;
 
     public OrderServiceImpl(CartRepository cartRepository,
                             OrderRepository orderRepository,
                             ProductRepository productRepository,
-                            AddressRepository addressRepository) {
-        this.cartRepository = cartRepository;
-        this.orderRepository = orderRepository;
-        this.productRepository = productRepository;
-        this.addressRepository = addressRepository;
+                            AddressRepository addressRepository,
+                            EmailService emailService,
+                            UserRepository userRepository) {
+        this.cartRepository     = cartRepository;
+        this.orderRepository    = orderRepository;
+        this.productRepository  = productRepository;
+        this.addressRepository  = addressRepository;
+        this.emailService       = emailService;
+        this.userRepository     = userRepository;
     }
 
     @Override
@@ -60,8 +69,8 @@ public class OrderServiceImpl implements OrderService {
 
         for (CartItem cartItem : cart.getItems()) {
 
-            Product product = cartItem.getProduct();
-            int quantity = cartItem.getQuantity();
+            Product product  = cartItem.getProduct();
+            int     quantity = cartItem.getQuantity();
 
             if (product.getStock() < quantity) {
                 throw new IllegalArgumentException("Stock insuficiente para: " + product.getName());
@@ -71,7 +80,7 @@ public class OrderServiceImpl implements OrderService {
             productRepository.save(product);
 
             double unitPrice = product.getPrice();
-            double subtotal = unitPrice * quantity;
+            double subtotal  = unitPrice * quantity;
 
             DetailsOrder detail = new DetailsOrder();
             detail.setOrder(order);
@@ -91,6 +100,28 @@ public class OrderServiceImpl implements OrderService {
 
         cart.getItems().clear();
         cartRepository.save(cart);
+
+        // ── Envío de email de confirmación ────────────────────────────
+        try {
+            User user = userRepository.findByEmail(customerEmail)
+                    .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
+
+            String deliveryDate = savedOrder.getCreatedAt()
+                    .plusDays(5)
+                    .format(DateTimeFormatter.ofPattern("dd MMMM yyyy", new Locale("es")));
+
+            emailService.sendOrderConfirmation(
+                    customerEmail,
+                    savedOrder.getId(),
+                    totalAmount,
+                    deliveryDate,
+                    savedOrder,
+                    user
+            );
+        } catch (Exception e) {
+            // El pedido ya está guardado — el fallo de email no revierte la compra
+            System.err.println("Error enviando email de confirmación: " + e.getMessage());
+        }
 
         return toResponse(savedOrder);
     }
@@ -149,10 +180,10 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalArgumentException("Estado no válido: " + status);
         }
 
-        if (newStatus != OrderStatus.PENDING &&
-                newStatus != OrderStatus.PAID &&
-                newStatus != OrderStatus.FAILED &&
-                newStatus != OrderStatus.SHIPPED &&
+        if (newStatus != OrderStatus.PENDING  &&
+                newStatus != OrderStatus.PAID     &&
+                newStatus != OrderStatus.FAILED   &&
+                newStatus != OrderStatus.SHIPPED  &&
                 newStatus != OrderStatus.DELIVERED &&
                 newStatus != OrderStatus.CANCELLED) {
             throw new IllegalArgumentException("Estado no permitido: " + status);
@@ -168,26 +199,6 @@ public class OrderServiceImpl implements OrderService {
     public void delete(Long id) {
     }
 
-    private OrderResponse toResponse(Order order) {
-        List<OrderItemResponse> items = order.getDetails()
-                .stream()
-                .map(d -> new OrderItemResponse(
-                        d.getProduct().getId(),
-                        d.getProduct().getName(),
-                        d.getQuantity(),
-                        d.getUnitPrice()
-                ))
-                .toList();
-
-        return new OrderResponse(
-                order.getId(),
-                order.getCustomerEmail(),
-                order.getTotalAmount(),
-                order.getStatus() == null ? null : order.getStatus().name(),
-                items,
-                order.getCreateDate()
-        );
-    }
     @Override
     public OrderResponse cancelMyOrder(String customerEmail, Long orderId) {
 
@@ -211,5 +222,26 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(OrderStatus.CANCELLED);
         Order saved = orderRepository.save(order);
         return toResponse(saved);
+    }
+
+    private OrderResponse toResponse(Order order) {
+        List<OrderItemResponse> items = order.getDetails()
+                .stream()
+                .map(d -> new OrderItemResponse(
+                        d.getProduct().getId(),
+                        d.getProduct().getName(),
+                        d.getQuantity(),
+                        d.getUnitPrice()
+                ))
+                .toList();
+
+        return new OrderResponse(
+                order.getId(),
+                order.getCustomerEmail(),
+                order.getTotalAmount(),
+                order.getStatus() == null ? null : order.getStatus().name(),
+                items,
+                order.getCreateDate()
+        );
     }
 }

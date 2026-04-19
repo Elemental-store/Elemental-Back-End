@@ -14,14 +14,13 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/admin/products/{productId}/images")
 public class ProductImageController {
 
-    private final ProductRepository productRepository;
+    private final ProductRepository      productRepository;
     private final ProductImageRepository productImageRepository;
 
     @Value("${upload.dir:uploads}")
@@ -32,7 +31,7 @@ public class ProductImageController {
 
     public ProductImageController(ProductRepository productRepository,
                                   ProductImageRepository productImageRepository) {
-        this.productRepository = productRepository;
+        this.productRepository      = productRepository;
         this.productImageRepository = productImageRepository;
     }
 
@@ -55,14 +54,13 @@ public class ProductImageController {
         Path uploadPath = Paths.get(uploadDir);
         if (!Files.exists(uploadPath)) Files.createDirectories(uploadPath);
 
-        String ext = getExtension(file.getOriginalFilename());
+        String ext      = getExtension(file.getOriginalFilename());
         String filename = "product-" + productId + "-" + UUID.randomUUID() + ext;
-        Path filePath = uploadPath.resolve(filename);
+        Path   filePath = uploadPath.resolve(filename);
         Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-        String imageUrl = baseUrl + "/uploads/" + filename;
-
-        int sortOrder = productImageRepository.findByProductIdOrderBySortOrderAsc(productId).size();
+        String imageUrl  = baseUrl + "/uploads/" + filename;
+        int    sortOrder = productImageRepository.findByProductIdOrderBySortOrderAsc(productId).size();
 
         ProductImage image = new ProductImage();
         image.setProduct(product);
@@ -77,6 +75,37 @@ public class ProductImageController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new ProductImageDto(saved.getId(), saved.getImageUrl(), saved.getSortOrder()));
+    }
+
+    // ── REORDER ──────────────────────────────────────────────
+    // Body: [ { id: 1 }, { id: 3 }, { id: 2 } ] — orden deseado
+    @PatchMapping("/reorder")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reorderImages(@PathVariable Long productId,
+                              @RequestBody List<Long> orderedIds) {
+
+        List<ProductImage> images = productImageRepository
+                .findByProductIdOrderBySortOrderAsc(productId);
+
+        for (int i = 0; i < orderedIds.size(); i++) {
+            final int index    = i;
+            final Long imageId = orderedIds.get(i);
+            images.stream()
+                    .filter(img -> img.getId().equals(imageId))
+                    .findFirst()
+                    .ifPresent(img -> img.setSortOrder(index));
+        }
+
+        productImageRepository.saveAll(images);
+
+        // Actualizar imageUrl principal con la primera imagen del nuevo orden
+        Product product = productRepository.findById(productId).orElseThrow();
+        orderedIds.stream().findFirst().flatMap(firstId ->
+                images.stream().filter(img -> img.getId().equals(firstId)).findFirst()
+        ).ifPresent(first -> {
+            product.setImageUrl(first.getImageUrl());
+            productRepository.save(product);
+        });
     }
 
     @DeleteMapping("/{imageId}")

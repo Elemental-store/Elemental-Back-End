@@ -6,7 +6,10 @@ import com.elemental.backend.dto.ProductResponse;
 import com.elemental.backend.entity.Category;
 import com.elemental.backend.entity.Product;
 import com.elemental.backend.exception.NotFoundException;
+import com.elemental.backend.repository.CartItemRepository;
 import com.elemental.backend.repository.CategoryRepository;
+import com.elemental.backend.repository.FavoriteRepository;
+import com.elemental.backend.repository.OrderDetailRepository;
 import com.elemental.backend.repository.ProductRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,11 +22,20 @@ public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final CartItemRepository cartItemRepository;
+    private final OrderDetailRepository orderDetailRepository;
+    private final FavoriteRepository favoriteRepository;
 
     public ProductServiceImpl(ProductRepository productRepository,
-                              CategoryRepository categoryRepository) {
-        this.productRepository = productRepository;
-        this.categoryRepository = categoryRepository;
+                              CategoryRepository categoryRepository,
+                              CartItemRepository cartItemRepository,
+                              OrderDetailRepository orderDetailRepository,
+                              FavoriteRepository favoriteRepository) {
+        this.productRepository    = productRepository;
+        this.categoryRepository   = categoryRepository;
+        this.cartItemRepository   = cartItemRepository;
+        this.orderDetailRepository = orderDetailRepository;
+        this.favoriteRepository   = favoriteRepository;
     }
 
     @Override
@@ -39,12 +51,12 @@ public class ProductServiceImpl implements ProductService {
 
         Product product = new Product();
         product.setName(name);
+        product.setDescription(request.getDescription());
         product.setPrice(request.getPrice());
         product.setStock(request.getStock());
         product.setCategory(category);
 
-        Product saved = productRepository.save(product);
-        return toResponse(saved);
+        return toResponse(productRepository.save(product));
     }
 
     @Override
@@ -70,7 +82,6 @@ public class ProductServiceImpl implements ProductService {
         if (!categoryRepository.existsById(categoryId)) {
             throw new NotFoundException("Categoría no encontrada con id: " + categoryId);
         }
-
         return productRepository.findByCategoryId(categoryId)
                 .stream()
                 .map(this::toResponse)
@@ -92,24 +103,28 @@ public class ProductServiceImpl implements ProductService {
                 .orElseThrow(() -> new NotFoundException("Categoría no encontrada con id: " + request.getCategoryId()));
 
         product.setName(newName);
+        product.setDescription(request.getDescription());
         product.setPrice(request.getPrice());
         product.setStock(request.getStock());
         product.setCategory(category);
 
-        Product saved = productRepository.save(product);
-        return toResponse(saved);
+        return toResponse(productRepository.save(product));
     }
 
     @Override
     public void delete(Long id) {
-        if (!productRepository.existsById(id)) {
-            throw new NotFoundException("Producto no encontrado con id: " + id);
-        }
-        productRepository.deleteById(id);
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Producto no encontrado con id: " + id));
+
+        favoriteRepository.deleteByProduct(product);
+        cartItemRepository.deleteByProduct(product);
+        orderDetailRepository.deleteByProduct(product);
+
+        productRepository.delete(product);
     }
 
     private ProductResponse toResponse(Product product) {
-        ProductResponse r = new ProductResponse(
+        ProductResponse response = new ProductResponse(
                 product.getId(),
                 product.getCategory().getId(),
                 product.getCategory().getName(),
@@ -119,11 +134,15 @@ public class ProductServiceImpl implements ProductService {
                 product.getCreateDate(),
                 product.getUpdateDate()
         );
-        r.setImageUrl(product.getImageUrl());
-        r.setImages(product.getImages().stream()
-                .map(i -> new ProductImageDto(i.getId(), i.getImageUrl(), i.getSortOrder()))
-                .toList());
-        return r;
-    }
 
+        response.setDescription(product.getDescription());
+        response.setImageUrl(product.getImageUrl());
+        response.setImages(
+                product.getImages().stream()
+                        .map(i -> new ProductImageDto(i.getId(), i.getImageUrl(), i.getSortOrder()))
+                        .toList()
+        );
+
+        return response;
+    }
 }

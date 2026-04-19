@@ -12,6 +12,8 @@ public class CategoryRequest {
     @Size(max = 50, message = "La descripción no puede superar 50 caracteres")
     private String description;
 
+    private Long parentId;
+
     public CategoryRequest() {}
 
     public String getName() { return name; }
@@ -19,4 +21,7 @@ public class CategoryRequest {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public Long getParentId() { return parentId; }
+    public void setParentId(Long parentId) { this.parentId = parentId; }
 }
