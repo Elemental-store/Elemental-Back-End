@@ -23,25 +23,28 @@ import java.util.Locale;
 @Transactional
 public class OrderServiceImpl implements OrderService {
 
-    private final CartRepository    cartRepository;
-    private final OrderRepository   orderRepository;
-    private final ProductRepository productRepository;
-    private final AddressRepository addressRepository;
-    private final EmailService      emailService;
-    private final UserRepository    userRepository;
+    private final CartRepository      cartRepository;
+    private final OrderRepository     orderRepository;
+    private final ProductRepository   productRepository;
+    private final AddressRepository   addressRepository;
+    private final EmailService        emailService;
+    private final UserRepository      userRepository;
+    private final NotificationService notificationService;
 
     public OrderServiceImpl(CartRepository cartRepository,
                             OrderRepository orderRepository,
                             ProductRepository productRepository,
                             AddressRepository addressRepository,
                             EmailService emailService,
-                            UserRepository userRepository) {
-        this.cartRepository     = cartRepository;
-        this.orderRepository    = orderRepository;
-        this.productRepository  = productRepository;
-        this.addressRepository  = addressRepository;
-        this.emailService       = emailService;
-        this.userRepository     = userRepository;
+                            UserRepository userRepository,
+                            NotificationService notificationService) {
+        this.cartRepository      = cartRepository;
+        this.orderRepository     = orderRepository;
+        this.productRepository   = productRepository;
+        this.addressRepository   = addressRepository;
+        this.emailService        = emailService;
+        this.userRepository      = userRepository;
+        this.notificationService = notificationService;
     }
 
     @Override
@@ -101,7 +104,7 @@ public class OrderServiceImpl implements OrderService {
         cart.getItems().clear();
         cartRepository.save(cart);
 
-        // ── Envío de email de confirmación ────────────────────────────
+        // ── Email y notificación de confirmación ──────────────────────────────
         try {
             User user = userRepository.findByEmail(customerEmail)
                     .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
@@ -118,9 +121,16 @@ public class OrderServiceImpl implements OrderService {
                     savedOrder,
                     user
             );
+
+            notificationService.createOrderConfirmedNotification(
+                    customerEmail,
+                    savedOrder.getId(),
+                    deliveryDate
+            );
+
         } catch (Exception e) {
-            // El pedido ya está guardado — el fallo de email no revierte la compra
-            System.err.println("Error enviando email de confirmación: " + e.getMessage());
+            // El pedido ya está guardado — el fallo de email/notificación no revierte la compra
+            System.err.println("Error enviando email/notificación: " + e.getMessage());
         }
 
         return toResponse(savedOrder);
@@ -155,7 +165,6 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public OrderResponse getMyOrderById(String email, Long orderId) {
-
         Order order = orderRepository.findByIdWithDetails(orderId)
                 .orElseThrow(() -> new NotFoundException("Pedido no encontrado con id: " + orderId));
 
@@ -180,10 +189,10 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalArgumentException("Estado no válido: " + status);
         }
 
-        if (newStatus != OrderStatus.PENDING  &&
-                newStatus != OrderStatus.PAID     &&
-                newStatus != OrderStatus.FAILED   &&
-                newStatus != OrderStatus.SHIPPED  &&
+        if (newStatus != OrderStatus.PENDING   &&
+                newStatus != OrderStatus.PAID      &&
+                newStatus != OrderStatus.FAILED    &&
+                newStatus != OrderStatus.SHIPPED   &&
                 newStatus != OrderStatus.DELIVERED &&
                 newStatus != OrderStatus.CANCELLED) {
             throw new IllegalArgumentException("Estado no permitido: " + status);
@@ -191,8 +200,7 @@ public class OrderServiceImpl implements OrderService {
 
         order.setStatus(newStatus);
 
-        Order saved = orderRepository.save(order);
-        return toResponse(saved);
+        return toResponse(orderRepository.save(order));
     }
 
     @Override
@@ -201,7 +209,6 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public OrderResponse cancelMyOrder(String customerEmail, Long orderId) {
-
         Order order = orderRepository.findByIdWithDetails(orderId)
                 .orElseThrow(() -> new NotFoundException("Pedido no encontrado con id: " + orderId));
 
@@ -220,8 +227,7 @@ public class OrderServiceImpl implements OrderService {
         }
 
         order.setStatus(OrderStatus.CANCELLED);
-        Order saved = orderRepository.save(order);
-        return toResponse(saved);
+        return toResponse(orderRepository.save(order));
     }
 
     private OrderResponse toResponse(Order order) {
