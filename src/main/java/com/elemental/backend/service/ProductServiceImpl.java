@@ -139,7 +139,12 @@ public class ProductServiceImpl implements ProductService {
         response.setImageUrl(product.getImageUrl());
         response.setImages(
                 product.getImages().stream()
-                        .map(i -> new ProductImageDto(i.getId(), i.getImageUrl(), i.getSortOrder()))
+                        .map(i -> new ProductImageDto(
+                                i.getId(),
+                                i.getImageUrl(),
+                                i.getZoomImageUrl() != null ? i.getZoomImageUrl() : i.getImageUrl(),
+                                i.getSortOrder()
+                        ))
                         .toList()
         );
 

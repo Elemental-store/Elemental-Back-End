@@ -11,16 +11,29 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.*;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/admin/products/{productId}/images")
 public class ProductImageController {
 
-    private final ProductRepository      productRepository;
+    private static final int DISPLAY_MAX_WIDTH = 1600;
+    private static final float JPEG_QUALITY = 0.9f;
+
+    private final ProductRepository productRepository;
     private final ProductImageRepository productImageRepository;
 
     @Value("${upload.dir:uploads}")
@@ -31,7 +44,7 @@ public class ProductImageController {
 
     public ProductImageController(ProductRepository productRepository,
                                   ProductImageRepository productImageRepository) {
-        this.productRepository      = productRepository;
+        this.productRepository = productRepository;
         this.productImageRepository = productImageRepository;
     }
 
@@ -39,7 +52,7 @@ public class ProductImageController {
     public List<ProductImageDto> getImages(@PathVariable Long productId) {
         return productImageRepository.findByProductIdOrderBySortOrderAsc(productId)
                 .stream()
-                .map(i -> new ProductImageDto(i.getId(), i.getImageUrl(), i.getSortOrder()))
+                .map(this::toDto)
                 .toList();
     }
 
@@ -51,20 +64,33 @@ public class ProductImageController {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new RuntimeException("Producto no encontrado"));
 
+        if (file.isEmpty()) {
+            throw new RuntimeException("El archivo de imagen esta vacio");
+        }
+
         Path uploadPath = Paths.get(uploadDir);
         if (!Files.exists(uploadPath)) Files.createDirectories(uploadPath);
 
-        String ext      = getExtension(file.getOriginalFilename());
-        String filename = "product-" + productId + "-" + UUID.randomUUID() + ext;
-        Path   filePath = uploadPath.resolve(filename);
-        Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+        String extension = normalizeExtension(file.getOriginalFilename());
+        String token = "product-" + productId + "-" + UUID.randomUUID();
+        String zoomFilename = token + "-zoom" + extension;
+        String displayFilename = token + "-display" + extension;
 
-        String imageUrl  = baseUrl + "/uploads/" + filename;
-        int    sortOrder = productImageRepository.findByProductIdOrderBySortOrderAsc(productId).size();
+        Path zoomPath = uploadPath.resolve(zoomFilename);
+        Path displayPath = uploadPath.resolve(displayFilename);
+
+        BufferedImage source = readImage(file);
+        saveImage(source, zoomPath, extension, false);
+        saveImage(source, displayPath, extension, true);
+
+        String zoomImageUrl = buildImageUrl(zoomFilename);
+        String imageUrl = buildImageUrl(displayFilename);
+        int sortOrder = productImageRepository.findByProductIdOrderBySortOrderAsc(productId).size();
 
         ProductImage image = new ProductImage();
         image.setProduct(product);
         image.setImageUrl(imageUrl);
+        image.setZoomImageUrl(zoomImageUrl);
         image.setSortOrder(sortOrder);
         ProductImage saved = productImageRepository.save(image);
 
@@ -73,12 +99,9 @@ public class ProductImageController {
             productRepository.save(product);
         }
 
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new ProductImageDto(saved.getId(), saved.getImageUrl(), saved.getSortOrder()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(toDto(saved));
     }
 
-    // ── REORDER ──────────────────────────────────────────────
-    // Body: [ { id: 1 }, { id: 3 }, { id: 2 } ] — orden deseado
     @PatchMapping("/reorder")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void reorderImages(@PathVariable Long productId,
@@ -88,7 +111,7 @@ public class ProductImageController {
                 .findByProductIdOrderBySortOrderAsc(productId);
 
         for (int i = 0; i < orderedIds.size(); i++) {
-            final int index    = i;
+            final int index = i;
             final Long imageId = orderedIds.get(i);
             images.stream()
                     .filter(img -> img.getId().equals(imageId))
@@ -98,7 +121,6 @@ public class ProductImageController {
 
         productImageRepository.saveAll(images);
 
-        // Actualizar imageUrl principal con la primera imagen del nuevo orden
         Product product = productRepository.findById(productId).orElseThrow();
         orderedIds.stream().findFirst().flatMap(firstId ->
                 images.stream().filter(img -> img.getId().equals(firstId)).findFirst()
@@ -128,9 +150,96 @@ public class ProductImageController {
         productRepository.save(product);
     }
 
-    private String getExtension(String filename) {
+    private ProductImageDto toDto(ProductImage image) {
+        return new ProductImageDto(
+                image.getId(),
+                image.getImageUrl(),
+                image.getZoomImageUrl() != null ? image.getZoomImageUrl() : image.getImageUrl(),
+                image.getSortOrder()
+        );
+    }
+
+    private BufferedImage readImage(MultipartFile file) throws IOException {
+        try (InputStream inputStream = file.getInputStream()) {
+            BufferedImage image = ImageIO.read(inputStream);
+            if (image == null) {
+                throw new RuntimeException("El archivo no es una imagen valida");
+            }
+            return image;
+        }
+    }
+
+    private void saveImage(BufferedImage source, Path target, String extension, boolean resizeForDisplay) throws IOException {
+        BufferedImage output = resizeForDisplay ? scaleDown(source, DISPLAY_MAX_WIDTH) : source;
+
+        if (".png".equals(extension)) {
+            ImageIO.write(output, "png", target.toFile());
+            return;
+        }
+
+        writeJpeg(output, target);
+    }
+
+    private BufferedImage scaleDown(BufferedImage source, int maxWidth) {
+        if (source.getWidth() <= maxWidth) {
+            return source;
+        }
+
+        int targetWidth = maxWidth;
+        int targetHeight = (int) Math.round((double) source.getHeight() * targetWidth / source.getWidth());
+        int imageType = source.getTransparency() == Transparency.OPAQUE ? BufferedImage.TYPE_INT_RGB : BufferedImage.TYPE_INT_ARGB;
+        BufferedImage scaled = new BufferedImage(targetWidth, targetHeight, imageType);
+        Graphics2D graphics = scaled.createGraphics();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            graphics.drawImage(source, 0, 0, targetWidth, targetHeight, null);
+        } finally {
+            graphics.dispose();
+        }
+        return scaled;
+    }
+
+    private void writeJpeg(BufferedImage image, Path target) throws IOException {
+        BufferedImage rgbImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = rgbImage.createGraphics();
+        try {
+            graphics.setColor(Color.WHITE);
+            graphics.fillRect(0, 0, rgbImage.getWidth(), rgbImage.getHeight());
+            graphics.drawImage(image, 0, 0, null);
+        } finally {
+            graphics.dispose();
+        }
+
+        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpg");
+        if (!writers.hasNext()) {
+            ImageIO.write(rgbImage, "jpg", target.toFile());
+            return;
+        }
+
+        ImageWriter writer = writers.next();
+        try (ImageOutputStream outputStream = ImageIO.createImageOutputStream(target.toFile())) {
+            writer.setOutput(outputStream);
+            ImageWriteParam writeParam = writer.getDefaultWriteParam();
+            if (writeParam.canWriteCompressed()) {
+                writeParam.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                writeParam.setCompressionQuality(JPEG_QUALITY);
+            }
+            writer.write(null, new IIOImage(rgbImage, null, null), writeParam);
+        } finally {
+            writer.dispose();
+        }
+    }
+
+    private String normalizeExtension(String filename) {
         if (filename == null) return ".jpg";
         int dot = filename.lastIndexOf('.');
-        return dot >= 0 ? filename.substring(dot) : ".jpg";
+        String extension = dot >= 0 ? filename.substring(dot).toLowerCase(Locale.ROOT) : ".jpg";
+        return ".png".equals(extension) ? ".png" : ".jpg";
+    }
+
+    private String buildImageUrl(String filename) {
+        return baseUrl + "/uploads/" + filename;
     }
 }

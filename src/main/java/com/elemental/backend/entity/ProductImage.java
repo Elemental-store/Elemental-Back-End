@@ -18,6 +18,9 @@ public class ProductImage {
     @Column(name = "image_url", nullable = false, length = 500)
     private String imageUrl;
 
+    @Column(name = "zoom_image_url", length = 500)
+    private String zoomImageUrl;
+
     @Column(name = "sort_order")
     private Integer sortOrder = 0;
 
@@ -32,6 +35,8 @@ public class ProductImage {
     public void setProduct(Product product) { this.product = product; }
     public String getImageUrl() { return imageUrl; }
     public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
+    public String getZoomImageUrl() { return zoomImageUrl; }
+    public void setZoomImageUrl(String zoomImageUrl) { this.zoomImageUrl = zoomImageUrl; }
     public Integer getSortOrder() { return sortOrder; }
     public void setSortOrder(Integer sortOrder) { this.sortOrder = sortOrder; }
     public LocalDateTime getCreatedAt() { return createdAt; }
