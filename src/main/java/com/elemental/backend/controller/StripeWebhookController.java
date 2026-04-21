@@ -10,6 +10,7 @@ import com.elemental.backend.service.NotificationService;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
+import com.stripe.model.PaymentMethod;
 import com.stripe.net.Webhook;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Optional;
@@ -67,7 +69,11 @@ public class StripeWebhookController {
             if (order == null) return ResponseEntity.ok("ignored_order_not_found");
 
             if (order.getStatus() != OrderStatus.PAID) {
+                enrichCardSnapshot(order, intent);
                 order.setStatus(OrderStatus.PAID);
+                if (order.getPaidAt() == null) {
+                    order.setPaidAt(LocalDateTime.now());
+                }
                 orderRepository.save(order);
 
                 String deliveryDate = calculateDeliveryDate();
@@ -145,5 +151,20 @@ public class StripeWebhookController {
             }
         }
         return null;
+    }
+
+    private void enrichCardSnapshot(Order order, PaymentIntent intent) {
+        try {
+            String paymentMethodId = intent.getPaymentMethod();
+            if (paymentMethodId == null || paymentMethodId.isBlank()) return;
+
+            PaymentMethod paymentMethod = PaymentMethod.retrieve(paymentMethodId);
+            if (paymentMethod.getCard() == null) return;
+
+            order.setCardBrand(paymentMethod.getCard().getBrand());
+            order.setCardLast4(paymentMethod.getCard().getLast4());
+        } catch (Exception e) {
+            System.err.println("Error guardando snapshot de tarjeta desde webhook: " + e.getMessage());
+        }
     }
 }

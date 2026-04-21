@@ -9,18 +9,25 @@ public class OrderResponse {
     private String customerEmail;
     private Double totalAmount;
     private String status;
+    private String payMethod;
+    private String cardBrand;
+    private String cardLast4;
     private List<OrderItemResponse> items;
     private LocalDateTime createDate;
 
     public OrderResponse() {}
 
     public OrderResponse(Long id, String customerEmail, Double totalAmount,
-                         String status, List<OrderItemResponse> items,
+                         String status, String payMethod, String cardBrand, String cardLast4,
+                         List<OrderItemResponse> items,
                          LocalDateTime createDate) {
         this.id = id;
         this.customerEmail = customerEmail;
         this.totalAmount = totalAmount;
         this.status = status;
+        this.payMethod = payMethod;
+        this.cardBrand = cardBrand;
+        this.cardLast4 = cardLast4;
         this.items = items;
         this.createDate = createDate;
     }
@@ -39,6 +46,18 @@ public class OrderResponse {
 
     public String getStatus() {
         return status;
+    }
+
+    public String getPayMethod() {
+        return payMethod;
+    }
+
+    public String getCardBrand() {
+        return cardBrand;
+    }
+
+    public String getCardLast4() {
+        return cardLast4;
     }
 
     public List<OrderItemResponse> getItems() {

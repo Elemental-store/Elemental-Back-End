@@ -9,15 +9,14 @@ import com.elemental.backend.repository.AddressRepository;
 import com.elemental.backend.repository.CartRepository;
 import com.elemental.backend.repository.OrderRepository;
 import com.elemental.backend.repository.ProductRepository;
-import com.elemental.backend.repository.UserRepository;
+import com.stripe.model.PaymentIntent;
+import com.stripe.model.PaymentMethod;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 @Service
 @Transactional
@@ -27,24 +26,15 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository     orderRepository;
     private final ProductRepository   productRepository;
     private final AddressRepository   addressRepository;
-    private final EmailService        emailService;
-    private final UserRepository      userRepository;
-    private final NotificationService notificationService;
 
     public OrderServiceImpl(CartRepository cartRepository,
                             OrderRepository orderRepository,
                             ProductRepository productRepository,
-                            AddressRepository addressRepository,
-                            EmailService emailService,
-                            UserRepository userRepository,
-                            NotificationService notificationService) {
+                            AddressRepository addressRepository) {
         this.cartRepository      = cartRepository;
         this.orderRepository     = orderRepository;
         this.productRepository   = productRepository;
         this.addressRepository   = addressRepository;
-        this.emailService        = emailService;
-        this.userRepository      = userRepository;
-        this.notificationService = notificationService;
     }
 
     @Override
@@ -104,35 +94,6 @@ public class OrderServiceImpl implements OrderService {
         cart.getItems().clear();
         cartRepository.save(cart);
 
-        // ── Email y notificación de confirmación ──────────────────────────────
-        try {
-            User user = userRepository.findByEmail(customerEmail)
-                    .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
-
-            String deliveryDate = savedOrder.getCreatedAt()
-                    .plusDays(5)
-                    .format(DateTimeFormatter.ofPattern("dd MMMM yyyy", new Locale("es")));
-
-            emailService.sendOrderConfirmation(
-                    customerEmail,
-                    savedOrder.getId(),
-                    totalAmount,
-                    deliveryDate,
-                    savedOrder,
-                    user
-            );
-
-            notificationService.createOrderConfirmedNotification(
-                    customerEmail,
-                    savedOrder.getId(),
-                    deliveryDate
-            );
-
-        } catch (Exception e) {
-            // El pedido ya está guardado — el fallo de email/notificación no revierte la compra
-            System.err.println("Error enviando email/notificación: " + e.getMessage());
-        }
-
         return toResponse(savedOrder);
     }
 
@@ -141,6 +102,7 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponse getById(Long id) {
         Order order = orderRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new NotFoundException("Pedido no encontrado con id: " + id));
+        hydratePaymentSnapshot(order);
         return toResponse(order);
     }
 
@@ -172,6 +134,7 @@ public class OrderServiceImpl implements OrderService {
             throw new AccessDeniedException("No tienes permiso para ver este pedido");
         }
 
+        hydratePaymentSnapshot(order);
         return toResponse(order);
     }
 
@@ -246,8 +209,31 @@ public class OrderServiceImpl implements OrderService {
                 order.getCustomerEmail(),
                 order.getTotalAmount(),
                 order.getStatus() == null ? null : order.getStatus().name(),
+                order.getPayMethod(),
+                order.getCardBrand(),
+                order.getCardLast4(),
                 items,
                 order.getCreateDate()
         );
+    }
+
+    private void hydratePaymentSnapshot(Order order) {
+        if (order.getCardBrand() != null && order.getCardLast4() != null) return;
+        if (order.getStripePaymentIntentId() == null || order.getStripePaymentIntentId().isBlank()) return;
+
+        try {
+            PaymentIntent intent = PaymentIntent.retrieve(order.getStripePaymentIntentId());
+            String paymentMethodId = intent.getPaymentMethod();
+            if (paymentMethodId == null || paymentMethodId.isBlank()) return;
+
+            PaymentMethod paymentMethod = PaymentMethod.retrieve(paymentMethodId);
+            if (paymentMethod.getCard() == null) return;
+
+            order.setCardBrand(paymentMethod.getCard().getBrand());
+            order.setCardLast4(paymentMethod.getCard().getLast4());
+            orderRepository.save(order);
+        } catch (Exception e) {
+            System.err.println("No se pudo hidratar la snapshot de tarjeta del pedido #" + order.getId() + ": " + e.getMessage());
+        }
     }
 }

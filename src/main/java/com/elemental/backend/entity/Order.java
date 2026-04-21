@@ -38,6 +38,12 @@ public class Order {
     @Column(name = "stripe_payment_intent_id")
     private String stripePaymentIntentId;
 
+    @Column(name = "card_brand", length = 30)
+    private String cardBrand;
+
+    @Column(name = "card_last4", length = 4)
+    private String cardLast4;
+
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
 
@@ -133,6 +139,22 @@ public class Order {
 
     public void setStripePaymentIntentId(String stripePaymentIntentId) {
         this.stripePaymentIntentId = stripePaymentIntentId;
+    }
+
+    public String getCardBrand() {
+        return cardBrand;
+    }
+
+    public void setCardBrand(String cardBrand) {
+        this.cardBrand = cardBrand;
+    }
+
+    public String getCardLast4() {
+        return cardLast4;
+    }
+
+    public void setCardLast4(String cardLast4) {
+        this.cardLast4 = cardLast4;
     }
 
     public LocalDateTime getPaidAt() {

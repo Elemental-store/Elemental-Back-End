@@ -28,6 +28,28 @@ public class NotificationService {
         notificationRepository.save(notification);
     }
 
+    public void createOrderShippedNotification(String userEmail, Long orderId) {
+        Notification notification = new Notification();
+        notification.setUserEmail(userEmail);
+        notification.setTitle("Pedido en reparto");
+        notification.setMessage("Tu pedido #" + orderId + " ya está en reparto.");
+        notification.setType("ORDER_SHIPPED");
+        notification.setOrderId(orderId);
+        notification.setRead(false);
+        notificationRepository.save(notification);
+    }
+
+    public void createOrderDeliveredNotification(String userEmail, Long orderId) {
+        Notification notification = new Notification();
+        notification.setUserEmail(userEmail);
+        notification.setTitle("Pedido entregado");
+        notification.setMessage("Tu pedido #" + orderId + " ha sido entregado.");
+        notification.setType("ORDER_DELIVERED");
+        notification.setOrderId(orderId);
+        notification.setRead(false);
+        notificationRepository.save(notification);
+    }
+
     @Transactional(readOnly = true)
     public List<Notification> getMyNotifications(String userEmail) {
         return notificationRepository.findByUserEmailOrderByCreatedAtDesc(userEmail);
