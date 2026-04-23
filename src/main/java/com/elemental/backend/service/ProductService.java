@@ -13,6 +13,8 @@ public interface ProductService {
 
     List<ProductResponse> getAll();
 
+    List<ProductResponse> search(String query, Integer limit);
+
     List<ProductResponse> getByCategoryId(Long categoryId);
 
     ProductResponse update(Long id, ProductRequest request);

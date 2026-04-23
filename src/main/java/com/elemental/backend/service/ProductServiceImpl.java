@@ -14,7 +14,11 @@ import com.elemental.backend.repository.ProductRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.text.Normalizer;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @Transactional
@@ -78,6 +82,32 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<ProductResponse> search(String query, Integer limit) {
+        String normalizedQuery = normalize(query);
+        if (normalizedQuery.isBlank()) {
+            return getAll();
+        }
+
+        List<String> terms = Arrays.stream(normalizedQuery.split("\\s+"))
+                .filter(term -> !term.isBlank())
+                .distinct()
+                .toList();
+
+        return productRepository.findAll()
+                .stream()
+                .filter(product -> matches(product, terms))
+                .sorted(
+                        Comparator
+                                .comparingInt((Product product) -> relevanceScore(product, normalizedQuery))
+                                .thenComparing(Product::getName, String.CASE_INSENSITIVE_ORDER)
+                )
+                .limit(resolveLimit(limit))
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<ProductResponse> getByCategoryId(Long categoryId) {
         if (!categoryRepository.existsById(categoryId)) {
             throw new NotFoundException("Categoría no encontrada con id: " + categoryId);
@@ -121,6 +151,77 @@ public class ProductServiceImpl implements ProductService {
         orderDetailRepository.deleteByProduct(product);
 
         productRepository.delete(product);
+    }
+
+    private boolean matches(Product product, List<String> terms) {
+        String searchable = searchableText(product);
+        return terms.stream().allMatch(searchable::contains);
+    }
+
+    private int relevanceScore(Product product, String query) {
+        String name = normalize(product.getName());
+        String categoryName = normalize(product.getCategory().getName());
+        String description = normalize(product.getDescription());
+
+        int nameScore = fieldScore(name, query, 0);
+        int categoryScore = fieldScore(categoryName, query, 40);
+        int descriptionScore = fieldScore(description, query, 80);
+
+        int score = Math.min(nameScore, Math.min(categoryScore, descriptionScore));
+        if (score == Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+
+        return score + Math.min(name.length(), 60);
+    }
+
+    private int fieldScore(String field, String query, int baseScore) {
+        if (field.isBlank()) {
+            return Integer.MAX_VALUE;
+        }
+        if (field.equals(query)) {
+            return baseScore;
+        }
+        if (field.startsWith(query)) {
+            return baseScore + 10;
+        }
+
+        int index = field.indexOf(query);
+        if (index >= 0) {
+            return baseScore + 20 + Math.min(index, 40);
+        }
+
+        return Integer.MAX_VALUE;
+    }
+
+    private String searchableText(Product product) {
+        return String.join(" ",
+                normalize(product.getName()),
+                normalize(product.getCategory().getName()),
+                normalize(product.getDescription())
+        ).trim();
+    }
+
+    private long resolveLimit(Integer limit) {
+        if (limit == null) {
+            return Long.MAX_VALUE;
+        }
+        return Math.max(1, Math.min(limit, 20));
+    }
+
+    private String normalize(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}\\s]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+
+        return normalized;
     }
 
     private ProductResponse toResponse(Product product) {

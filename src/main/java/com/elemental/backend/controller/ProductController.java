@@ -29,7 +29,13 @@ public class ProductController {
 
 
     @GetMapping
-    public ResponseEntity<List<ProductResponse>> getAll() {
+    public ResponseEntity<List<ProductResponse>> getAll(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Integer limit
+    ) {
+        if (q != null && !q.isBlank()) {
+            return ResponseEntity.ok(productService.search(q, limit));
+        }
         return ResponseEntity.ok(productService.getAll());
     }
 
