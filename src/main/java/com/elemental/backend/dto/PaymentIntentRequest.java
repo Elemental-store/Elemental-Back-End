@@ -10,6 +10,7 @@ public class PaymentIntentRequest {
     private String paymentMethodId;
     private String cardBrand;
     private String cardLast4;
+    private boolean savePaymentMethod;
 
     public Long getOrderId() { return orderId; }
     public void setOrderId(Long orderId) { this.orderId = orderId; }
@@ -36,5 +37,13 @@ public class PaymentIntentRequest {
 
     public void setCardLast4(String cardLast4) {
         this.cardLast4 = cardLast4;
+    }
+
+    public boolean isSavePaymentMethod() {
+        return savePaymentMethod;
+    }
+
+    public void setSavePaymentMethod(boolean savePaymentMethod) {
+        this.savePaymentMethod = savePaymentMethod;
     }
 }

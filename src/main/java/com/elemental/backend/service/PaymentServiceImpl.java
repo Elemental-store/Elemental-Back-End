@@ -30,21 +30,24 @@ public class PaymentServiceImpl implements PaymentService {
     private final UserRepository  userRepository;
     private final NotificationService notificationService;
     private final EmailService emailService;
+    private final StripeService stripeService;
 
     public PaymentServiceImpl(OrderRepository orderRepository,
                               UserRepository userRepository,
                               NotificationService notificationService,
                               EmailService emailService,
+                              StripeService stripeService,
                               @Value("${stripe.secretKey}") String secretKey) {
         this.orderRepository = orderRepository;
         this.userRepository  = userRepository;
         this.notificationService = notificationService;
         this.emailService = emailService;
+        this.stripeService = stripeService;
         Stripe.apiKey = secretKey;
     }
 
     @Override
-    public PaymentIntentResponse createIntent(String userEmail, Long orderId) {
+    public PaymentIntentResponse createIntent(String userEmail, Long orderId, boolean savePaymentMethod) {
 
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Pedido no encontrado"));
@@ -60,9 +63,8 @@ public class PaymentServiceImpl implements PaymentService {
         long amountCents = Math.round(order.getTotalAmount() * 100.0);
 
         try {
-            // Obtener el stripeCustomerId del usuario si existe
             User user = userRepository.findByEmail(userEmail).orElse(null);
-            String stripeCustomerId = (user != null) ? user.getStripeCustomerId() : null;
+            String stripeCustomerId = getStripeCustomerId(user, savePaymentMethod);
 
             PaymentIntentCreateParams.Builder builder =
                     PaymentIntentCreateParams.builder()
@@ -82,6 +84,10 @@ public class PaymentServiceImpl implements PaymentService {
                 builder.setCustomer(stripeCustomerId);
             }
 
+            if (savePaymentMethod) {
+                builder.setSetupFutureUsage(PaymentIntentCreateParams.SetupFutureUsage.OFF_SESSION);
+            }
+
             PaymentIntent intent = PaymentIntent.create(builder.build());
 
             order.setStripePaymentIntentId(intent.getId());
@@ -92,6 +98,20 @@ public class PaymentServiceImpl implements PaymentService {
         } catch (Exception e) {
             throw new RuntimeException("Error creando PaymentIntent: " + e.getMessage(), e);
         }
+    }
+
+    private String getStripeCustomerId(User user, boolean requiredForSavedPaymentMethod) {
+        if (user == null) return null;
+        if (!isBlank(user.getStripeCustomerId())) return user.getStripeCustomerId();
+        if (!requiredForSavedPaymentMethod) return null;
+
+        String name = ((user.getFirstName() != null ? user.getFirstName() : "")
+                + " "
+                + (user.getLastName() != null ? user.getLastName() : "")).trim();
+        String customerId = stripeService.createCustomer(user.getEmail(), name);
+        user.setStripeCustomerId(customerId);
+        userRepository.save(user);
+        return customerId;
     }
 
     @Override
