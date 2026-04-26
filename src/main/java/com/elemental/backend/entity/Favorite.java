@@ -23,7 +23,6 @@ public class Favorite {
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    // Getters y setters
     public Long getId() { return id; }
     public User getUser() { return user; }
     public void setUser(User user) { this.user = user; }

@@ -13,13 +13,15 @@ public class Product {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // FK -> category.id
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id", nullable = false)
     private Category category;
 
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 100)
     private String name;
+
+    @Column(length = 1000)
+    private String description;
 
     @Column(nullable = false)
     private Double price;
@@ -27,14 +29,18 @@ public class Product {
     @Column(nullable = false)
     private Integer stock;
 
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @Column(name = "image_url", length = 500)
-    private String imageUrl;
+    @OneToMany(mappedBy = "product", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OrderBy("sortOrder ASC")
+    private List<ProductImage> images = new ArrayList<>();
 
     @PrePersist
     protected void onCreate() {
@@ -46,12 +52,6 @@ public class Product {
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
-
-    @OneToMany(mappedBy = "product", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @OrderBy("sortOrder ASC")
-    private List<ProductImage> images = new ArrayList<>();
-
-    public List<ProductImage> getImages() { return images; }
 
     public Long getId() {
         return id;
@@ -77,6 +77,14 @@ public class Product {
         this.name = name;
     }
 
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     public Double getPrice() {
         return price;
     }
@@ -93,8 +101,13 @@ public class Product {
         this.stock = stock;
     }
 
-    public String getImageUrl() { return imageUrl; }
-    public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
+    }
 
     public LocalDateTime getCreateDate() {
         return createdAt;
@@ -102,5 +115,9 @@ public class Product {
 
     public LocalDateTime getUpdateDate() {
         return updatedAt;
+    }
+
+    public List<ProductImage> getImages() {
+        return images;
     }
 }

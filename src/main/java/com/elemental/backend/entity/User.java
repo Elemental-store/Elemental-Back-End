@@ -42,7 +42,6 @@ public class User {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // ── Stripe ──────────────────────────────────────
     @Column(name = "stripe_customer_id", length = 100)
     private String stripeCustomerId;
 

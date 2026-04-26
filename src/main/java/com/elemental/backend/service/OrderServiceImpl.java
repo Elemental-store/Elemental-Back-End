@@ -3,12 +3,18 @@ package com.elemental.backend.service;
 import com.elemental.backend.dto.OrderItemResponse;
 import com.elemental.backend.dto.OrderRequest;
 import com.elemental.backend.dto.OrderResponse;
+import com.elemental.backend.dto.AddressResponse;
 import com.elemental.backend.entity.*;
 import com.elemental.backend.exception.NotFoundException;
 import com.elemental.backend.repository.AddressRepository;
 import com.elemental.backend.repository.CartRepository;
 import com.elemental.backend.repository.OrderRepository;
 import com.elemental.backend.repository.ProductRepository;
+import com.elemental.backend.repository.UserRepository;
+import com.stripe.model.PaymentIntent;
+import com.stripe.model.PaymentMethod;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,30 +26,36 @@ import java.util.List;
 @Transactional
 public class OrderServiceImpl implements OrderService {
 
-    private final CartRepository cartRepository;
-    private final OrderRepository orderRepository;
-    private final ProductRepository productRepository;
-    private final AddressRepository addressRepository;
+    private static final Logger log = LoggerFactory.getLogger(OrderServiceImpl.class);
+
+    private final CartRepository      cartRepository;
+    private final OrderRepository     orderRepository;
+    private final ProductRepository   productRepository;
+    private final AddressRepository   addressRepository;
+    private final UserRepository      userRepository;
+    private final EmailService        emailService;
 
     public OrderServiceImpl(CartRepository cartRepository,
                             OrderRepository orderRepository,
                             ProductRepository productRepository,
-                            AddressRepository addressRepository) {
-        this.cartRepository = cartRepository;
-        this.orderRepository = orderRepository;
-        this.productRepository = productRepository;
-        this.addressRepository = addressRepository;
+                            AddressRepository addressRepository,
+                            UserRepository userRepository,
+                            EmailService emailService) {
+        this.cartRepository      = cartRepository;
+        this.orderRepository     = orderRepository;
+        this.productRepository   = productRepository;
+        this.addressRepository   = addressRepository;
+        this.userRepository      = userRepository;
+        this.emailService        = emailService;
     }
 
     @Override
     public OrderResponse createMyOrder(String customerEmail, OrderRequest request) {
 
-        // 1) Validar dirección (ownership)
         Address address = addressRepository
                 .findByIdAndUserEmail(request.getAddressId(), customerEmail)
                 .orElseThrow(() -> new AccessDeniedException("Dirección no válida para este usuario"));
 
-        // 2) Cargar carrito con items + productos
         Cart cart = cartRepository.findByUserEmailWithItems(customerEmail)
                 .orElseThrow(() -> new NotFoundException("Carrito no encontrado"));
 
@@ -51,32 +63,29 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalArgumentException("El carrito está vacío");
         }
 
-        // 3) Crear pedido base
         Order order = new Order();
         order.setCustomerEmail(customerEmail);
         order.setAddress(address);
         order.setStatus(OrderStatus.PENDING);
         order.setPayMethod(request.getPayMethod());
 
-        // 4) Crear detalles desde carrito + validar stock
         List<DetailsOrder> details = new ArrayList<>();
         double totalAmount = 0.0;
 
         for (CartItem cartItem : cart.getItems()) {
 
-            Product product = cartItem.getProduct(); // viene ya cargado por fetch join
-            int quantity = cartItem.getQuantity();
+            Product product  = cartItem.getProduct();
+            int     quantity = cartItem.getQuantity();
 
             if (product.getStock() < quantity) {
                 throw new IllegalArgumentException("Stock insuficiente para: " + product.getName());
             }
 
-            // descontar stock
             product.setStock(product.getStock() - quantity);
             productRepository.save(product);
 
             double unitPrice = product.getPrice();
-            double subtotal = unitPrice * quantity;
+            double subtotal  = unitPrice * quantity;
 
             DetailsOrder detail = new DetailsOrder();
             detail.setOrder(order);
@@ -92,10 +101,8 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalAmount(totalAmount);
         order.setDetails(details);
 
-        // 5) Guardar pedido
         Order savedOrder = orderRepository.save(order);
 
-        // 6) Vaciar carrito
         cart.getItems().clear();
         cartRepository.save(cart);
 
@@ -107,6 +114,7 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponse getById(Long id) {
         Order order = orderRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new NotFoundException("Pedido no encontrado con id: " + id));
+        hydratePaymentSnapshot(order);
         return toResponse(order);
     }
 
@@ -131,7 +139,6 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public OrderResponse getMyOrderById(String email, Long orderId) {
-
         Order order = orderRepository.findByIdWithDetails(orderId)
                 .orElseThrow(() -> new NotFoundException("Pedido no encontrado con id: " + orderId));
 
@@ -139,6 +146,7 @@ public class OrderServiceImpl implements OrderService {
             throw new AccessDeniedException("No tienes permiso para ver este pedido");
         }
 
+        hydratePaymentSnapshot(order);
         return toResponse(order);
     }
 
@@ -156,25 +164,60 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalArgumentException("Estado no válido: " + status);
         }
 
-        // (Opcional) restringir estados permitidos desde admin:
-        if (newStatus != OrderStatus.PENDING &&
-                newStatus != OrderStatus.PAID &&
-                newStatus != OrderStatus.FAILED &&
-                newStatus != OrderStatus.SHIPPED &&
-                newStatus != OrderStatus.DELIVERED &&
-                newStatus != OrderStatus.CANCELLED) {  // ← añade esto
-            throw new IllegalArgumentException("Estado no permitido: " + status);
-        }
-
         order.setStatus(newStatus);
 
-        Order saved = orderRepository.save(order);
-        return toResponse(saved);
+        return toResponse(orderRepository.save(order));
     }
 
     @Override
     public void delete(Long id) {
-        // pendiente / no implementado
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Pedido no encontrado con id: " + id));
+        orderRepository.delete(order);
+    }
+
+    @Override
+    public OrderResponse cancelMyOrder(String customerEmail, Long orderId) {
+        Order order = orderRepository.findByIdWithDetails(orderId)
+                .orElseThrow(() -> new NotFoundException("Pedido no encontrado con id: " + orderId));
+
+        if (!order.getCustomerEmail().equalsIgnoreCase(customerEmail)) {
+            throw new AccessDeniedException("No tienes permiso para cancelar este pedido");
+        }
+
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new IllegalStateException("Solo se pueden cancelar pedidos en estado PENDIENTE");
+        }
+
+        for (DetailsOrder detail : order.getDetails()) {
+            Product product = detail.getProduct();
+            product.setStock(product.getStock() + detail.getQuantity());
+            productRepository.save(product);
+        }
+
+        order.setStatus(OrderStatus.CANCELLED);
+        return toResponse(orderRepository.save(order));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] generateMyOrderInvoicePdf(String customerEmail, Long orderId) {
+        Order order = orderRepository.findByIdWithDetails(orderId)
+                .orElseThrow(() -> new NotFoundException("Pedido no encontrado con id: " + orderId));
+
+        if (!order.getCustomerEmail().equalsIgnoreCase(customerEmail)) {
+            throw new AccessDeniedException("No tienes permiso para descargar este ticket");
+        }
+
+        User user = userRepository.findByEmail(customerEmail)
+                .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
+
+        byte[] pdf = emailService.generateInvoicePdf(order, user, order.getTotalAmount());
+        if (pdf == null || pdf.length == 0) {
+            throw new IllegalStateException("No se pudo generar el ticket del pedido");
+        }
+
+        return pdf;
     }
 
     private OrderResponse toResponse(Order order) {
@@ -183,45 +226,66 @@ public class OrderServiceImpl implements OrderService {
                 .map(d -> new OrderItemResponse(
                         d.getProduct().getId(),
                         d.getProduct().getName(),
+                        firstProductImage(d.getProduct()),
                         d.getQuantity(),
                         d.getUnitPrice()
                 ))
                 .toList();
 
+        Address address = order.getAddress();
+        AddressResponse addressResponse = address == null ? null : new AddressResponse(
+                address.getId(),
+                address.getStreet(),
+                address.getCity(),
+                address.getPostalCode(),
+                address.getCountry(),
+                address.getCreatedAt(),
+                address.getUpdatedAt()
+        );
+
         return new OrderResponse(
                 order.getId(),
                 order.getCustomerEmail(),
                 order.getTotalAmount(),
-                order.getStatus() == null ? null : order.getStatus().name(), // <-- status como String
+                order.getStatus() == null ? null : order.getStatus().name(),
+                order.getPayMethod(),
+                order.getCardBrand(),
+                order.getCardLast4(),
+                addressResponse,
                 items,
                 order.getCreateDate()
         );
     }
-    @Override
-    public OrderResponse cancelMyOrder(String customerEmail, Long orderId) {
 
-        Order order = orderRepository.findByIdWithDetails(orderId)
-                .orElseThrow(() -> new NotFoundException("Pedido no encontrado con id: " + orderId));
-
-        // Verificar que el pedido pertenece al cliente
-        if (!order.getCustomerEmail().equalsIgnoreCase(customerEmail)) {
-            throw new AccessDeniedException("No tienes permiso para cancelar este pedido");
+    private String firstProductImage(Product product) {
+        if (product.getImageUrl() != null && !product.getImageUrl().isBlank()) {
+            return product.getImageUrl();
         }
 
-        // Solo se pueden cancelar pedidos PENDING
-        if (order.getStatus() != OrderStatus.PENDING) {
-            throw new IllegalStateException("Solo se pueden cancelar pedidos en estado PENDIENTE");
+        if (product.getImages() == null || product.getImages().isEmpty()) {
+            return null;
         }
 
-        // Restaurar stock de los productos
-        for (DetailsOrder detail : order.getDetails()) {
-            Product product = detail.getProduct();
-            product.setStock(product.getStock() + detail.getQuantity());
-            productRepository.save(product);
-        }
+        return product.getImages().get(0).getImageUrl();
+    }
 
-        order.setStatus(OrderStatus.CANCELLED);
-        Order saved = orderRepository.save(order);
-        return toResponse(saved);
+    private void hydratePaymentSnapshot(Order order) {
+        if (order.getCardBrand() != null && order.getCardLast4() != null) return;
+        if (order.getStripePaymentIntentId() == null || order.getStripePaymentIntentId().isBlank()) return;
+
+        try {
+            PaymentIntent intent = PaymentIntent.retrieve(order.getStripePaymentIntentId());
+            String paymentMethodId = intent.getPaymentMethod();
+            if (paymentMethodId == null || paymentMethodId.isBlank()) return;
+
+            PaymentMethod paymentMethod = PaymentMethod.retrieve(paymentMethodId);
+            if (paymentMethod.getCard() == null) return;
+
+            order.setCardBrand(paymentMethod.getCard().getBrand());
+            order.setCardLast4(paymentMethod.getCard().getLast4());
+            orderRepository.save(order);
+        } catch (Exception e) {
+            log.warn("No se pudo hidratar la snapshot de tarjeta del pedido {}", order.getId(), e);
+        }
     }
 }

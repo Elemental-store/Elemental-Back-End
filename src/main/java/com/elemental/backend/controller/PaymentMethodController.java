@@ -1,8 +1,11 @@
 package com.elemental.backend.controller;
 
+import com.elemental.backend.dto.SavePaymentMethodRequest;
 import com.elemental.backend.entity.User;
 import com.elemental.backend.repository.UserRepository;
+import com.elemental.backend.service.StripeCustomerService;
 import com.elemental.backend.service.StripeService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -16,15 +19,17 @@ import java.util.Map;
 public class PaymentMethodController {
 
     private final StripeService stripeService;
+    private final StripeCustomerService stripeCustomerService;
     private final UserRepository userRepository;
 
     public PaymentMethodController(StripeService stripeService,
+                                   StripeCustomerService stripeCustomerService,
                                    UserRepository userRepository) {
         this.stripeService  = stripeService;
+        this.stripeCustomerService = stripeCustomerService;
         this.userRepository = userRepository;
     }
 
-    // GET /api/my/payment-methods — listar tarjetas guardadas
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> list(
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -36,33 +41,33 @@ public class PaymentMethodController {
         return ResponseEntity.ok(stripeService.listPaymentMethods(user.getStripeCustomerId()));
     }
 
-    // POST /api/my/payment-methods/setup-intent — obtener clientSecret para añadir tarjeta
     @PostMapping("/setup-intent")
     public ResponseEntity<Map<String, String>> setupIntent(
             @AuthenticationPrincipal UserDetails userDetails) {
 
         User user = getUser(userDetails);
-
-        // Si no tiene Customer en Stripe, lo creamos ahora
-        if (user.getStripeCustomerId() == null) {
-            String name = (user.getFirstName() != null ? user.getFirstName() : "")
-                    + " " + (user.getLastName() != null ? user.getLastName() : "");
-            String customerId = stripeService.createCustomer(user.getEmail(), name.trim());
-            user.setStripeCustomerId(customerId);
-            userRepository.save(user);
-        }
+        stripeCustomerService.ensureCustomer(user);
 
         String clientSecret = stripeService.createSetupIntent(user.getStripeCustomerId());
         return ResponseEntity.ok(Map.of("clientSecret", clientSecret));
     }
 
-    // DELETE /api/my/payment-methods/:id — eliminar tarjeta
+    @PostMapping
+    public ResponseEntity<Void> save(
+            @Valid @RequestBody SavePaymentMethodRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        User user = getUser(userDetails);
+        stripeCustomerService.ensureCustomer(user);
+        stripeService.attachPaymentMethod(request.getPaymentMethodId(), user.getStripeCustomerId());
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/{paymentMethodId}")
     public ResponseEntity<Void> delete(
             @PathVariable String paymentMethodId,
             @AuthenticationPrincipal UserDetails userDetails) {
 
-        // Verificamos que el usuario tenga customer antes de eliminar
         User user = getUser(userDetails);
         if (user.getStripeCustomerId() == null) {
             return ResponseEntity.badRequest().build();
@@ -76,4 +81,5 @@ public class PaymentMethodController {
         return userRepository.findByEmail(userDetails.getUsername())
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
     }
+
 }

@@ -11,8 +11,11 @@ public class ProductRequest {
     private Long categoryId;
 
     @NotBlank(message = "El nombre es obligatorio")
-    @Size(max = 20, message = "El nombre no puede superar 20 caracteres")
+    @Size(max = 100, message = "El nombre no puede superar 100 caracteres")
     private String name;
+
+    @Size(max = 1000, message = "La descripción no puede superar 1000 caracteres")
+    private String description;
 
     @NotNull(message = "El precio es obligatorio")
     @Min(value = 0, message = "El precio no puede ser negativo")
@@ -38,6 +41,14 @@ public class ProductRequest {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public Double getPrice() {

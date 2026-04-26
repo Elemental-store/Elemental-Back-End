@@ -26,24 +26,21 @@ public class OrderController {
             @Valid @RequestBody OrderRequest request,
             Authentication authentication
     ) {
-        String email = authentication.getName(); // viene del JWT
+        String email = authentication.getName();
         OrderResponse created = orderService.createMyOrder(email, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
-    // Listar pedidos
     @GetMapping
     public ResponseEntity<List<OrderResponse>> getAll() {
         return ResponseEntity.ok(orderService.getAll());
     }
 
-    // Obtener pedido por id
     @GetMapping("/{id}")
     public ResponseEntity<OrderResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(orderService.getById(id));
     }
 
-    // Eliminar pedido
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         orderService.delete(id);

@@ -7,36 +7,31 @@ import java.util.List;
 public class ProductResponse {
 
     private Long id;
-
     private Long categoryId;
     private String categoryName;
-
     private String name;
+    private String description;
     private Double price;
     private Integer stock;
     private String imageUrl;
-
     private LocalDateTime createDate;
     private LocalDateTime updateDate;
+    private List<ProductImageDto> images = new ArrayList<>();
 
     public ProductResponse() {}
 
     public ProductResponse(Long id, Long categoryId, String categoryName, String name,
-                           Double price, Integer stock, LocalDateTime createDate, LocalDateTime updateDate) {
-        this.id = id;
-        this.categoryId = categoryId;
+                           Double price, Integer stock,
+                           LocalDateTime createDate, LocalDateTime updateDate) {
+        this.id           = id;
+        this.categoryId   = categoryId;
         this.categoryName = categoryName;
-        this.name = name;
-        this.price = price;
-        this.stock = stock;
-        this.createDate = createDate;
-        this.updateDate = updateDate;
-        this.imageUrl = imageUrl;
+        this.name         = name;
+        this.price        = price;
+        this.stock        = stock;
+        this.createDate   = createDate;
+        this.updateDate   = updateDate;
     }
-    private List<ProductImageDto> images = new ArrayList<>();
-
-    public List<ProductImageDto> getImages() { return images; }
-    public void setImages(List<ProductImageDto> images) { this.images = images; }
 
     public Long getId() {
         return id;
@@ -70,6 +65,14 @@ public class ProductResponse {
         this.name = name;
     }
 
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     public Double getPrice() {
         return price;
     }
@@ -84,6 +87,14 @@ public class ProductResponse {
 
     public void setStock(Integer stock) {
         this.stock = stock;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 
     public LocalDateTime getCreateDate() {
@@ -102,7 +113,11 @@ public class ProductResponse {
         this.updateDate = updateDate;
     }
 
-    public String getImageUrl() { return imageUrl; }
-    public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
+    public List<ProductImageDto> getImages() {
+        return images;
+    }
 
+    public void setImages(List<ProductImageDto> images) {
+        this.images = images;
+    }
 }

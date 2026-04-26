@@ -20,6 +20,22 @@ public class PaymentController {
     @PostMapping("/intent")
     public PaymentIntentResponse createIntent(@Valid @RequestBody PaymentIntentRequest request,
                                               Authentication authentication) {
-        return paymentService.createIntent(authentication.getName(), request.getOrderId());
+        return paymentService.createIntent(
+                authentication.getName(),
+                request.getOrderId(),
+                request.isSavePaymentMethod()
+        );
+    }
+
+    @PostMapping("/confirm")
+    public void confirmPayment(@Valid @RequestBody PaymentIntentRequest request,
+                               Authentication authentication) {
+        paymentService.confirmSuccessfulPayment(
+                authentication.getName(),
+                request.getOrderId(),
+                request.getPaymentMethodId(),
+                request.getCardBrand(),
+                request.getCardLast4()
+        );
     }
 }

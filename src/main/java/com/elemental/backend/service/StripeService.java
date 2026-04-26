@@ -7,6 +7,7 @@ import com.stripe.model.PaymentMethodCollection;
 import com.stripe.model.SetupIntent;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.CustomerListPaymentMethodsParams;
+import com.stripe.param.PaymentMethodAttachParams;
 import com.stripe.param.SetupIntentCreateParams;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -15,16 +16,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 public class StripeService {
 
-    public StripeService(@Value("${stripe.secret-key}") String secretKey) {
+    public StripeService(@Value("${stripe.secretKey}") String secretKey) {
         Stripe.apiKey = secretKey;
     }
 
-    // ── Crear Customer en Stripe ──────────────────────────────
     public String createCustomer(String email, String name) {
         try {
             CustomerCreateParams params = CustomerCreateParams.builder()
@@ -38,7 +37,6 @@ public class StripeService {
         }
     }
 
-    // ── Crear SetupIntent para guardar tarjeta ────────────────
     public String createSetupIntent(String customerId) {
         try {
             SetupIntentCreateParams params = SetupIntentCreateParams.builder()
@@ -52,7 +50,6 @@ public class StripeService {
         }
     }
 
-    // ── Listar tarjetas del Customer ──────────────────────────
     public List<Map<String, Object>> listPaymentMethods(String customerId) {
         try {
             CustomerListPaymentMethodsParams params = CustomerListPaymentMethodsParams.builder()
@@ -80,13 +77,34 @@ public class StripeService {
         }
     }
 
-    // ── Eliminar método de pago ───────────────────────────────
     public void detachPaymentMethod(String paymentMethodId) {
         try {
             PaymentMethod pm = PaymentMethod.retrieve(paymentMethodId);
             pm.detach();
         } catch (Exception e) {
             throw new RuntimeException("Error eliminando método de pago: " + e.getMessage());
+        }
+    }
+
+    public void attachPaymentMethod(String paymentMethodId, String customerId) {
+        try {
+            PaymentMethod pm = PaymentMethod.retrieve(paymentMethodId);
+            String currentCustomer = pm.getCustomer();
+
+            if (customerId.equals(currentCustomer)) {
+                return;
+            }
+
+            if (currentCustomer != null && !currentCustomer.isBlank()) {
+                throw new RuntimeException("La tarjeta ya está asociada a otro cliente");
+            }
+
+            PaymentMethodAttachParams params = PaymentMethodAttachParams.builder()
+                    .setCustomer(customerId)
+                    .build();
+            pm.attach(params);
+        } catch (Exception e) {
+            throw new RuntimeException("Error guardando método de pago: " + e.getMessage());
         }
     }
 }
