@@ -3,12 +3,14 @@ package com.elemental.backend.service;
 import com.elemental.backend.dto.OrderItemResponse;
 import com.elemental.backend.dto.OrderRequest;
 import com.elemental.backend.dto.OrderResponse;
+import com.elemental.backend.dto.AddressResponse;
 import com.elemental.backend.entity.*;
 import com.elemental.backend.exception.NotFoundException;
 import com.elemental.backend.repository.AddressRepository;
 import com.elemental.backend.repository.CartRepository;
 import com.elemental.backend.repository.OrderRepository;
 import com.elemental.backend.repository.ProductRepository;
+import com.elemental.backend.repository.UserRepository;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.PaymentMethod;
 import org.slf4j.Logger;
@@ -30,15 +32,21 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository     orderRepository;
     private final ProductRepository   productRepository;
     private final AddressRepository   addressRepository;
+    private final UserRepository      userRepository;
+    private final EmailService        emailService;
 
     public OrderServiceImpl(CartRepository cartRepository,
                             OrderRepository orderRepository,
                             ProductRepository productRepository,
-                            AddressRepository addressRepository) {
+                            AddressRepository addressRepository,
+                            UserRepository userRepository,
+                            EmailService emailService) {
         this.cartRepository      = cartRepository;
         this.orderRepository     = orderRepository;
         this.productRepository   = productRepository;
         this.addressRepository   = addressRepository;
+        this.userRepository      = userRepository;
+        this.emailService        = emailService;
     }
 
     @Override
@@ -191,16 +199,49 @@ public class OrderServiceImpl implements OrderService {
         return toResponse(orderRepository.save(order));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] generateMyOrderInvoicePdf(String customerEmail, Long orderId) {
+        Order order = orderRepository.findByIdWithDetails(orderId)
+                .orElseThrow(() -> new NotFoundException("Pedido no encontrado con id: " + orderId));
+
+        if (!order.getCustomerEmail().equalsIgnoreCase(customerEmail)) {
+            throw new AccessDeniedException("No tienes permiso para descargar este ticket");
+        }
+
+        User user = userRepository.findByEmail(customerEmail)
+                .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
+
+        byte[] pdf = emailService.generateInvoicePdf(order, user, order.getTotalAmount());
+        if (pdf == null || pdf.length == 0) {
+            throw new IllegalStateException("No se pudo generar el ticket del pedido");
+        }
+
+        return pdf;
+    }
+
     private OrderResponse toResponse(Order order) {
         List<OrderItemResponse> items = order.getDetails()
                 .stream()
                 .map(d -> new OrderItemResponse(
                         d.getProduct().getId(),
                         d.getProduct().getName(),
+                        firstProductImage(d.getProduct()),
                         d.getQuantity(),
                         d.getUnitPrice()
                 ))
                 .toList();
+
+        Address address = order.getAddress();
+        AddressResponse addressResponse = address == null ? null : new AddressResponse(
+                address.getId(),
+                address.getStreet(),
+                address.getCity(),
+                address.getPostalCode(),
+                address.getCountry(),
+                address.getCreatedAt(),
+                address.getUpdatedAt()
+        );
 
         return new OrderResponse(
                 order.getId(),
@@ -210,9 +251,22 @@ public class OrderServiceImpl implements OrderService {
                 order.getPayMethod(),
                 order.getCardBrand(),
                 order.getCardLast4(),
+                addressResponse,
                 items,
                 order.getCreateDate()
         );
+    }
+
+    private String firstProductImage(Product product) {
+        if (product.getImageUrl() != null && !product.getImageUrl().isBlank()) {
+            return product.getImageUrl();
+        }
+
+        if (product.getImages() == null || product.getImages().isEmpty()) {
+            return null;
+        }
+
+        return product.getImages().get(0).getImageUrl();
     }
 
     private void hydratePaymentSnapshot(Order order) {

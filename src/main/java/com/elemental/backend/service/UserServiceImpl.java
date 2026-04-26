@@ -1,16 +1,22 @@
 package com.elemental.backend.service;
 
 import com.elemental.backend.dto.AdminUserUpdateRequest;
+import com.elemental.backend.dto.AuthResponse;
+import com.elemental.backend.dto.EmailChangeRequest;
+import com.elemental.backend.dto.PasswordChangeRequest;
 import com.elemental.backend.dto.UserProfileResponse;
 import com.elemental.backend.dto.UserProfileUpdateRequest;
 import com.elemental.backend.entity.Address;
 import com.elemental.backend.entity.Role;
 import com.elemental.backend.entity.User;
+import com.elemental.backend.exception.ConflictException;
 import com.elemental.backend.exception.NotFoundException;
 import com.elemental.backend.repository.AddressRepository;
 import com.elemental.backend.repository.CartRepository;
 import com.elemental.backend.repository.UserRepository;
+import com.elemental.backend.security.JwtService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,13 +30,19 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final CartRepository cartRepository;
     private final AddressRepository addressRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
     public UserServiceImpl(UserRepository userRepository,
                            CartRepository cartRepository,
-                           AddressRepository addressRepository) {
+                           AddressRepository addressRepository,
+                           PasswordEncoder passwordEncoder,
+                           JwtService jwtService) {
         this.userRepository = userRepository;
         this.cartRepository = cartRepository;
         this.addressRepository = addressRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
     }
 
     @Override
@@ -60,6 +72,46 @@ public class UserServiceImpl implements UserService {
         user.setPhone(request.getPhone());
 
         return toResponse(userRepository.saveAndFlush(user));
+    }
+
+    @Override
+    public AuthResponse changeMyEmail(String email, EmailChangeRequest request) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
+
+        if (!user.isEnabled()) {
+            throw new UsernameNotFoundException("Usuario desactivado");
+        }
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("La contraseña actual no es correcta");
+        }
+
+        String newEmail = request.getNewEmail().trim().toLowerCase();
+        if (!newEmail.equalsIgnoreCase(user.getEmail()) && userRepository.existsByEmail(newEmail)) {
+            throw new ConflictException("Ya existe una cuenta con ese email");
+        }
+
+        user.setEmail(newEmail);
+        User saved = userRepository.saveAndFlush(user);
+        return new AuthResponse(jwtService.generateToken(saved), saved.getEmail(), saved.getRole().name());
+    }
+
+    @Override
+    public void changeMyPassword(String email, PasswordChangeRequest request) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
+
+        if (!user.isEnabled()) {
+            throw new UsernameNotFoundException("Usuario desactivado");
+        }
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("La contraseña actual no es correcta");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.saveAndFlush(user);
     }
 
     @Override

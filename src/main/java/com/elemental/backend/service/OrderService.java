@@ -23,5 +23,7 @@ public interface OrderService {
 
     OrderResponse cancelMyOrder(String customerEmail, Long orderId);
 
+    byte[] generateMyOrderInvoicePdf(String customerEmail, Long orderId);
+
     void delete(Long id);
 }

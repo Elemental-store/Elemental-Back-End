@@ -71,7 +71,7 @@ public class EmailService {
         }
     }
 
-    private byte[] generateInvoicePdf(Order order, User user, double total) {
+    public byte[] generateInvoicePdf(Order order, User user, double total) {
         try {
             String invoiceNumber = String.format("F%04d", order.getId());
             String invoiceDate   = order.getCreatedAt()
