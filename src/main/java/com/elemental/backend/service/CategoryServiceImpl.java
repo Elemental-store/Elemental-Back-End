@@ -32,7 +32,6 @@ public class CategoryServiceImpl implements CategoryService {
     public CategoryResponse create(CategoryRequest request) {
         String name = request.getName().trim();
 
-        // Resolver el padre antes del check de duplicados
         Category parent = resolveParent(request.getParentId());
 
         if (categoryRepository.existsByNameAndParent(name, parent)) {
@@ -70,14 +69,12 @@ public class CategoryServiceImpl implements CategoryService {
 
         String newName = request.getName().trim();
 
-        // Resolver el padre antes del check de duplicados
         Category parent = resolveParent(request.getParentId());
 
         if (request.getParentId() != null && request.getParentId().equals(id)) {
             throw new IllegalArgumentException("Una categoría no puede ser su propio padre");
         }
 
-        // Solo lanzar error si el nombre cambia y ya existe en el mismo nivel
         if (!category.getName().equalsIgnoreCase(newName)
                 && categoryRepository.existsByNameAndParent(newName, parent)) {
             throw new IllegalArgumentException("Ya existe una categoría con ese nombre en esta categoría padre");
@@ -95,24 +92,19 @@ public class CategoryServiceImpl implements CategoryService {
         Category category = categoryRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Categoría no encontrada con id: " + id));
 
-        // 1. Desvincular subcategorías que tengan esta como padre
         List<Category> subcategories = categoryRepository.findByParent(category);
         for (Category sub : subcategories) {
             sub.setParent(null);
             categoryRepository.save(sub);
         }
 
-        // 2. Borrar productos de esta categoría y sus dependencias
         List<Product> products = productRepository.findByCategory(category);
         for (Product product : products) {
             productService.delete(product.getId());
         }
 
-        // 3. Borrar la categoría
         categoryRepository.delete(category);
     }
-
-    // ── Métodos privados ──────────────────────────────────────────────────────
 
     private Category resolveParent(Long parentId) {
         if (parentId == null) {

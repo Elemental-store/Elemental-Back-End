@@ -26,7 +26,7 @@ public class OrderController {
             @Valid @RequestBody OrderRequest request,
             Authentication authentication
     ) {
-        String email = authentication.getName(); // viene del JWT
+        String email = authentication.getName();
         OrderResponse created = orderService.createMyOrder(email, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }

@@ -5,6 +5,7 @@ import com.elemental.backend.entity.User;
 import com.elemental.backend.exception.NotFoundException;
 import com.elemental.backend.repository.PasswordResetTokenRepository;
 import com.elemental.backend.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,15 +20,18 @@ public class PasswordResetService {
     private final UserRepository userRepository;
     private final EmailService emailService;
     private final PasswordEncoder passwordEncoder;
+    private final String frontendUrl;
 
     public PasswordResetService(PasswordResetTokenRepository tokenRepository,
                                 UserRepository userRepository,
                                 EmailService emailService,
-                                PasswordEncoder passwordEncoder) {
+                                PasswordEncoder passwordEncoder,
+                                @Value("${app.frontend-url:http://localhost:4200}") String frontendUrl) {
         this.tokenRepository = tokenRepository;
         this.userRepository  = userRepository;
         this.emailService    = emailService;
         this.passwordEncoder = passwordEncoder;
+        this.frontendUrl     = frontendUrl;
     }
 
     @Transactional
@@ -41,7 +45,7 @@ public class PasswordResetService {
             token.setExpiresAt(LocalDateTime.now().plusMinutes(30));
             tokenRepository.save(token);
 
-            String link = "http://localhost:4200/reset-password?token=" + token.getToken();
+            String link = frontendUrl + "/reset-password?token=" + token.getToken();
             emailService.sendPasswordResetEmail(email, user.getFirstName(), link);
         });
     }

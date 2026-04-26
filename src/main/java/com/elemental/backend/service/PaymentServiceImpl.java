@@ -5,45 +5,44 @@ import com.elemental.backend.entity.Order;
 import com.elemental.backend.entity.OrderStatus;
 import com.elemental.backend.entity.User;
 import com.elemental.backend.exception.NotFoundException;
-import com.elemental.backend.service.EmailService;
-import com.elemental.backend.service.NotificationService;
 import com.elemental.backend.repository.OrderRepository;
 import com.elemental.backend.repository.UserRepository;
-import com.stripe.Stripe;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.PaymentMethod;
 import com.stripe.param.PaymentIntentCreateParams;
-import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 @Service
 @Transactional
 public class PaymentServiceImpl implements PaymentService {
 
+    private static final Logger log = LoggerFactory.getLogger(PaymentServiceImpl.class);
+
     private final OrderRepository orderRepository;
     private final UserRepository  userRepository;
     private final NotificationService notificationService;
     private final EmailService emailService;
-    private final StripeService stripeService;
+    private final StripeCustomerService stripeCustomerService;
+    private final DeliveryDateService deliveryDateService;
 
     public PaymentServiceImpl(OrderRepository orderRepository,
                               UserRepository userRepository,
                               NotificationService notificationService,
                               EmailService emailService,
-                              StripeService stripeService,
-                              @Value("${stripe.secretKey}") String secretKey) {
+                              StripeCustomerService stripeCustomerService,
+                              DeliveryDateService deliveryDateService) {
         this.orderRepository = orderRepository;
         this.userRepository  = userRepository;
         this.notificationService = notificationService;
         this.emailService = emailService;
-        this.stripeService = stripeService;
-        Stripe.apiKey = secretKey;
+        this.stripeCustomerService = stripeCustomerService;
+        this.deliveryDateService = deliveryDateService;
     }
 
     @Override
@@ -105,13 +104,7 @@ public class PaymentServiceImpl implements PaymentService {
         if (!isBlank(user.getStripeCustomerId())) return user.getStripeCustomerId();
         if (!requiredForSavedPaymentMethod) return null;
 
-        String name = ((user.getFirstName() != null ? user.getFirstName() : "")
-                + " "
-                + (user.getLastName() != null ? user.getLastName() : "")).trim();
-        String customerId = stripeService.createCustomer(user.getEmail(), name);
-        user.setStripeCustomerId(customerId);
-        userRepository.save(user);
-        return customerId;
+        return stripeCustomerService.ensureCustomer(user);
     }
 
     @Override
@@ -156,13 +149,13 @@ public class PaymentServiceImpl implements PaymentService {
         }
         orderRepository.save(order);
 
-        String deliveryDate = calculateDeliveryDate();
+        String deliveryDate = deliveryDateService.nextDeliveryDate();
 
         try {
             notificationService.createOrderConfirmedNotification(
                     order.getCustomerEmail(), order.getId(), deliveryDate);
         } catch (Exception e) {
-            System.err.println("Error creando notificación: " + e.getMessage());
+            log.warn("No se pudo crear la notificación del pedido {}", order.getId(), e);
         }
 
         try {
@@ -176,7 +169,7 @@ public class PaymentServiceImpl implements PaymentService {
                     user
             );
         } catch (Exception e) {
-            System.err.println("Error enviando email: " + e.getMessage());
+            log.warn("No se pudo enviar el email del pedido {}", order.getId(), e);
         }
     }
 
@@ -196,7 +189,7 @@ public class PaymentServiceImpl implements PaymentService {
             order.setCardBrand(paymentMethod.getCard().getBrand());
             order.setCardLast4(paymentMethod.getCard().getLast4());
         } catch (Exception e) {
-            System.err.println("Error guardando snapshot de tarjeta: " + e.getMessage());
+            log.warn("No se pudo guardar la snapshot de tarjeta del pedido {}", order.getId(), e);
         }
     }
 
@@ -213,14 +206,4 @@ public class PaymentServiceImpl implements PaymentService {
         return value == null || value.isBlank();
     }
 
-    private String calculateDeliveryDate() {
-        LocalDate date = LocalDate.now();
-        int businessDays = 0;
-        while (businessDays < 3) {
-            date = date.plusDays(1);
-            int dow = date.getDayOfWeek().getValue();
-            if (dow != 6 && dow != 7) businessDays++;
-        }
-        return date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-    }
 }

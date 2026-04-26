@@ -24,7 +24,7 @@ public class Notification {
     private boolean read = false;
 
     @Column(nullable = false)
-    private String type; // ORDER_CONFIRMED, ORDER_SHIPPED, ORDER_DELIVERED
+    private String type;
 
     private Long orderId;
 

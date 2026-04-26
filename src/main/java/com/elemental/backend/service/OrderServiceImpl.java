@@ -11,6 +11,8 @@ import com.elemental.backend.repository.OrderRepository;
 import com.elemental.backend.repository.ProductRepository;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.PaymentMethod;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,8 @@ import java.util.List;
 @Service
 @Transactional
 public class OrderServiceImpl implements OrderService {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderServiceImpl.class);
 
     private final CartRepository      cartRepository;
     private final OrderRepository     orderRepository;
@@ -152,15 +156,6 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalArgumentException("Estado no válido: " + status);
         }
 
-        if (newStatus != OrderStatus.PENDING   &&
-                newStatus != OrderStatus.PAID      &&
-                newStatus != OrderStatus.FAILED    &&
-                newStatus != OrderStatus.SHIPPED   &&
-                newStatus != OrderStatus.DELIVERED &&
-                newStatus != OrderStatus.CANCELLED) {
-            throw new IllegalArgumentException("Estado no permitido: " + status);
-        }
-
         order.setStatus(newStatus);
 
         return toResponse(orderRepository.save(order));
@@ -168,6 +163,9 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public void delete(Long id) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Pedido no encontrado con id: " + id));
+        orderRepository.delete(order);
     }
 
     @Override
@@ -233,7 +231,7 @@ public class OrderServiceImpl implements OrderService {
             order.setCardLast4(paymentMethod.getCard().getLast4());
             orderRepository.save(order);
         } catch (Exception e) {
-            System.err.println("No se pudo hidratar la snapshot de tarjeta del pedido #" + order.getId() + ": " + e.getMessage());
+            log.warn("No se pudo hidratar la snapshot de tarjeta del pedido {}", order.getId(), e);
         }
     }
 }

@@ -3,6 +3,7 @@ package com.elemental.backend.controller;
 import com.elemental.backend.dto.ProductImageDto;
 import com.elemental.backend.entity.Product;
 import com.elemental.backend.entity.ProductImage;
+import com.elemental.backend.exception.NotFoundException;
 import com.elemental.backend.repository.ProductImageRepository;
 import com.elemental.backend.repository.ProductRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -62,10 +63,10 @@ public class ProductImageController {
             @RequestParam("file") MultipartFile file) throws IOException {
 
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new RuntimeException("Producto no encontrado"));
+                .orElseThrow(() -> new NotFoundException("Producto no encontrado"));
 
         if (file.isEmpty()) {
-            throw new RuntimeException("El archivo de imagen esta vacio");
+            throw new IllegalArgumentException("El archivo de imagen está vacío");
         }
 
         Path uploadPath = Paths.get(uploadDir);
@@ -121,7 +122,8 @@ public class ProductImageController {
 
         productImageRepository.saveAll(images);
 
-        Product product = productRepository.findById(productId).orElseThrow();
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new NotFoundException("Producto no encontrado"));
         orderedIds.stream().findFirst().flatMap(firstId ->
                 images.stream().filter(img -> img.getId().equals(firstId)).findFirst()
         ).ifPresent(first -> {
@@ -134,10 +136,10 @@ public class ProductImageController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteImage(@PathVariable Long productId, @PathVariable Long imageId) {
         ProductImage image = productImageRepository.findById(imageId)
-                .orElseThrow(() -> new RuntimeException("Imagen no encontrada"));
+                .orElseThrow(() -> new NotFoundException("Imagen no encontrada"));
 
         if (!image.getProduct().getId().equals(productId)) {
-            throw new RuntimeException("La imagen no pertenece a este producto");
+            throw new IllegalArgumentException("La imagen no pertenece a este producto");
         }
 
         productImageRepository.delete(image);
@@ -145,7 +147,8 @@ public class ProductImageController {
         List<ProductImage> remaining = productImageRepository
                 .findByProductIdOrderBySortOrderAsc(productId);
 
-        Product product = productRepository.findById(productId).orElseThrow();
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new NotFoundException("Producto no encontrado"));
         product.setImageUrl(remaining.isEmpty() ? null : remaining.get(0).getImageUrl());
         productRepository.save(product);
     }
@@ -163,7 +166,7 @@ public class ProductImageController {
         try (InputStream inputStream = file.getInputStream()) {
             BufferedImage image = ImageIO.read(inputStream);
             if (image == null) {
-                throw new RuntimeException("El archivo no es una imagen valida");
+                throw new IllegalArgumentException("El archivo no es una imagen válida");
             }
             return image;
         }

@@ -14,9 +14,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         String location = "file:///" + uploadDir.replace("\\", "/") + "/";
-        System.out.println("=== UPLOADS LOCATION: " + location);
         registry.addResourceHandler("/uploads/**")
                 .addResourceLocations(location);
     }
-
 }

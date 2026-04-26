@@ -16,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Service
-
 public class CartServiceImpl implements CartService {
 
     private final CartRepository cartRepository;
@@ -50,7 +49,6 @@ public class CartServiceImpl implements CartService {
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> new NotFoundException("Producto no encontrado"));
 
-        // Si ya existe el mismo producto+talla, incrementa cantidad
         CartItem existing = cart.getItems().stream()
                 .filter(i -> i.getProduct().getId().equals(product.getId())
                         && sameSize(i.getSize(), request.getSize()))

@@ -1,4 +1,4 @@
-package com.elemental.backend.entity; // usa el mismo package que Role y PayMethod
+package com.elemental.backend.entity;
 
 public enum OrderStatus {
     PENDING,

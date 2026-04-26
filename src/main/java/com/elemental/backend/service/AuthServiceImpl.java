@@ -8,6 +8,8 @@ import com.elemental.backend.entity.User;
 import com.elemental.backend.exception.ConflictException;
 import com.elemental.backend.repository.UserRepository;
 import com.elemental.backend.security.JwtService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -17,22 +19,24 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthServiceImpl implements AuthService {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
-    private final StripeService stripeService;
+    private final StripeCustomerService stripeCustomerService;
 
     public AuthServiceImpl(UserRepository userRepository,
                            PasswordEncoder passwordEncoder,
                            AuthenticationManager authenticationManager,
                            JwtService jwtService,
-                           StripeService stripeService) {
+                           StripeCustomerService stripeCustomerService) {
         this.userRepository      = userRepository;
         this.passwordEncoder     = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.jwtService          = jwtService;
-        this.stripeService       = stripeService;
+        this.stripeCustomerService = stripeCustomerService;
     }
 
     @Override
@@ -50,18 +54,12 @@ public class AuthServiceImpl implements AuthService {
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setRole(admin ? Role.ROLE_ADMIN : Role.ROLE_USER);
 
-        // Guardar primero para tener el ID
         userRepository.save(user);
 
-        // Crear Customer en Stripe y guardar el ID
         try {
-            String name = ((request.getFirstName() != null ? request.getFirstName() : "")
-                    + " " + (request.getLastName() != null ? request.getLastName() : "")).trim();
-            String customerId = stripeService.createCustomer(user.getEmail(), name);
-            user.setStripeCustomerId(customerId);
-            userRepository.save(user);
+            stripeCustomerService.ensureCustomer(user);
         } catch (Exception e) {
-            System.err.println("Warning: No se pudo crear Stripe Customer: " + e.getMessage());
+            log.warn("No se pudo crear el cliente de Stripe para {}", user.getEmail(), e);
         }
 
         String token = jwtService.generateToken(user);

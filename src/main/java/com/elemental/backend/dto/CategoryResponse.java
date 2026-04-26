@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 public class CategoryResponse {
 
     private Long          id;
-    private Long          parentId; // ← añadir
+    private Long          parentId;
     private String        name;
     private String        description;
     private LocalDateTime createdDate;

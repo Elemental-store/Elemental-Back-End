@@ -15,7 +15,6 @@ import java.util.Date;
 @Service
 public class JwtService {
 
-    // CLAVE BASE64 (mínimo 256 bits al decodificar)
     private static final String SECRET_KEY =
             "bWluaW1vXzMyX2NhcmFjdGVyZXNfYmFzZTY0X3NlY3JldF9rZXk=";
 
@@ -23,7 +22,7 @@ public class JwtService {
         return Jwts.builder()
                 .setSubject(user.getEmail())
                 .claim("role", user.getRole().name())
-                .claim("name", user.getFirstName())  // ← añadir esta línea
+                .claim("name", user.getFirstName())
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + 1000L * 60 * 60 * 24))
                 .signWith(getSignKey(), SignatureAlgorithm.HS256)

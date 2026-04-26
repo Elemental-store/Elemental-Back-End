@@ -16,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -98,30 +97,25 @@ public class UserServiceImpl implements UserService {
         return new UserProfileResponse(
                 user.getId(),
                 user.getEmail(),
-                user.getRole().name(),
+                user.getRole() != null ? user.getRole().name() : null,
                 user.getFirstName(),
                 user.getLastName(),
                 user.getPhone()
         );
     }
+
     @Override
     public List<UserProfileResponse> getAllUsers() {
         return userRepository.findAll()
                 .stream()
-                .map(u -> new UserProfileResponse(
-                        u.getId(),
-                        u.getEmail(),
-                        u.getRole() != null ? u.getRole().name() : null,
-                        u.getFirstName(),
-                        u.getLastName(),
-                        u.getPhone()
-                ))
-                .collect(Collectors.toList());
+                .map(this::toResponse)
+                .toList();
     }
+
     @Override
     public UserProfileResponse updateUserById(Long id, AdminUserUpdateRequest request) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+                .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
 
         if (request.getFirstName() != null) user.setFirstName(request.getFirstName());
         if (request.getLastName() != null) user.setLastName(request.getLastName());
@@ -130,14 +124,7 @@ public class UserServiceImpl implements UserService {
 
         userRepository.save(user);
 
-        return new UserProfileResponse(
-                user.getId(),
-                user.getEmail(),
-                user.getRole() != null ? user.getRole().name() : null,
-                user.getFirstName(),
-                user.getLastName(),
-                user.getPhone()
-        );
+        return toResponse(user);
     }
 
     @Override

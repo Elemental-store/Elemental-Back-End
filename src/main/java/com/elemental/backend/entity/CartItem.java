@@ -28,7 +28,6 @@ public class CartItem {
     @Column(name = "added_at")
     private LocalDateTime addedAt = LocalDateTime.now();
 
-    // getters/setters
     public Long getId() { return id; }
     public Cart getCart() { return cart; }
     public void setCart(Cart cart) { this.cart = cart; }

@@ -5,7 +5,10 @@ import com.elemental.backend.entity.User;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.util.ByteArrayDataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -15,12 +18,15 @@ import org.thymeleaf.context.Context;
 
 import java.io.ByteArrayOutputStream;
 import java.time.format.DateTimeFormatter;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 @Service
 public class EmailService {
+
+    private static final Logger log = LoggerFactory.getLogger(EmailService.class);
 
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
@@ -59,11 +65,9 @@ public class EmailService {
             }
 
             mailSender.send(message);
-            System.out.println("Email enviado correctamente a: " + toEmail);
-
+            log.info("Email de confirmación enviado a {}", toEmail);
         } catch (Exception e) {
-            System.err.println("Error enviando email: " + e.getMessage());
-            e.printStackTrace();
+            log.error("Error enviando email de confirmación a {}", toEmail, e);
         }
     }
 
@@ -98,12 +102,11 @@ public class EmailService {
 
             String logoBase64 = "";
             try {
-                org.springframework.core.io.ClassPathResource logoResource =
-                        new org.springframework.core.io.ClassPathResource("static/images/LogoFactura.png");
+                ClassPathResource logoResource = new ClassPathResource("static/images/LogoFactura.png");
                 byte[] logoBytes = logoResource.getInputStream().readAllBytes();
-                logoBase64 = "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(logoBytes);
+                logoBase64 = "data:image/png;base64," + Base64.getEncoder().encodeToString(logoBytes);
             } catch (Exception e) {
-                System.err.println("Error cargando logo: " + e.getMessage());
+                log.warn("No se pudo cargar el logo de la factura", e);
             }
 
             Context ctx = new Context(new Locale("es"));
@@ -121,9 +124,6 @@ public class EmailService {
 
             String invoiceHtml = templateEngine.process("emails/invoice", ctx);
 
-            int itemCount = order.getDetails().size();
-            float pageHeightMm = 175 + (itemCount * 18);
-
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             PdfRendererBuilder builder = new PdfRendererBuilder();
             builder.withHtmlContent(invoiceHtml, null);
@@ -134,8 +134,7 @@ public class EmailService {
             return out.toByteArray();
 
         } catch (Exception e) {
-            System.err.println("Error generando PDF: " + e.getMessage());
-            e.printStackTrace();
+            log.error("Error generando factura PDF para el pedido {}", order.getId(), e);
             return null;
         }
     }
@@ -153,10 +152,9 @@ public class EmailService {
                     + "Si no solicitaste este cambio, ignora este email.\n\n"
                     + "— El equipo de ELEMENTAL");
             mailSender.send(msg);
-            System.out.println("Email de recuperación enviado a: " + to);
+            log.info("Email de recuperación enviado a {}", to);
         } catch (Exception e) {
-            System.err.println("Error enviando email de recuperación: " + e.getMessage());
-            e.printStackTrace();
+            log.error("Error enviando email de recuperación a {}", to, e);
             throw new RuntimeException("Error enviando email");
         }
     }

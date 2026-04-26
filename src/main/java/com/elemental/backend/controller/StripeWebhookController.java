@@ -5,6 +5,7 @@ import com.elemental.backend.entity.OrderStatus;
 import com.elemental.backend.entity.User;
 import com.elemental.backend.repository.OrderRepository;
 import com.elemental.backend.repository.UserRepository;
+import com.elemental.backend.service.DeliveryDateService;
 import com.elemental.backend.service.EmailService;
 import com.elemental.backend.service.NotificationService;
 import com.stripe.exception.SignatureVerificationException;
@@ -13,14 +14,14 @@ import com.stripe.model.PaymentIntent;
 import com.stripe.model.PaymentMethod;
 import com.stripe.net.Webhook;
 import jakarta.transaction.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Optional;
 
@@ -28,10 +29,13 @@ import java.util.Optional;
 @RequestMapping("/api/webhooks/stripe")
 public class StripeWebhookController {
 
+    private static final Logger log = LoggerFactory.getLogger(StripeWebhookController.class);
+
     private final OrderRepository     orderRepository;
     private final UserRepository      userRepository;
     private final NotificationService notificationService;
     private final EmailService        emailService;
+    private final DeliveryDateService deliveryDateService;
 
     @Value("${stripe.webhookSecret}")
     private String webhookSecret;
@@ -39,11 +43,13 @@ public class StripeWebhookController {
     public StripeWebhookController(OrderRepository orderRepository,
                                    UserRepository userRepository,
                                    NotificationService notificationService,
-                                   EmailService emailService) {
+                                   EmailService emailService,
+                                   DeliveryDateService deliveryDateService) {
         this.orderRepository     = orderRepository;
         this.userRepository      = userRepository;
         this.notificationService = notificationService;
         this.emailService        = emailService;
+        this.deliveryDateService = deliveryDateService;
     }
 
     @PostMapping
@@ -76,13 +82,13 @@ public class StripeWebhookController {
                 }
                 orderRepository.save(order);
 
-                String deliveryDate = calculateDeliveryDate();
+                String deliveryDate = deliveryDateService.nextDeliveryDate();
 
                 try {
                     notificationService.createOrderConfirmedNotification(
                             order.getCustomerEmail(), order.getId(), deliveryDate);
                 } catch (Exception e) {
-                    System.err.println("Error creando notificación: " + e.getMessage());
+                    log.warn("No se pudo crear la notificación del pedido {}", order.getId(), e);
                 }
 
                 try {
@@ -97,7 +103,7 @@ public class StripeWebhookController {
                             user
                     );
                 } catch (Exception e) {
-                    System.err.println("Error enviando email: " + e.getMessage());
+                    log.warn("No se pudo enviar el email del pedido {}", order.getId(), e);
                 }
             }
             return ResponseEntity.ok("ok");
@@ -118,17 +124,6 @@ public class StripeWebhookController {
         return ResponseEntity.ok("unhandled");
     }
 
-    private String calculateDeliveryDate() {
-        LocalDate date = LocalDate.now();
-        int businessDays = 0;
-        while (businessDays < 3) {
-            date = date.plusDays(1);
-            int dow = date.getDayOfWeek().getValue();
-            if (dow != 6 && dow != 7) businessDays++;
-        }
-        return date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-    }
-
     private PaymentIntent getPaymentIntent(Event event) {
         try {
             return (PaymentIntent) event.getDataObjectDeserializer().deserializeUnsafe();
@@ -147,7 +142,9 @@ public class StripeWebhookController {
             if (orderIdStr != null && !orderIdStr.isBlank()) {
                 try {
                     return orderRepository.findById(Long.parseLong(orderIdStr)).orElse(null);
-                } catch (NumberFormatException ignored) {}
+                } catch (NumberFormatException e) {
+                    log.warn("Stripe envió un orderId inválido: {}", orderIdStr, e);
+                }
             }
         }
         return null;
@@ -164,7 +161,7 @@ public class StripeWebhookController {
             order.setCardBrand(paymentMethod.getCard().getBrand());
             order.setCardLast4(paymentMethod.getCard().getLast4());
         } catch (Exception e) {
-            System.err.println("Error guardando snapshot de tarjeta desde webhook: " + e.getMessage());
+            log.warn("No se pudo guardar la snapshot de tarjeta del pedido {} desde webhook", order.getId(), e);
         }
     }
 }
